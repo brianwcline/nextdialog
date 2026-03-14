@@ -1,8 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Toggle } from "./Toggle";
+import { SessionTypeIcon } from "./SessionTypeIcon";
 import type { RecentSession } from "../lib/recentSessions";
+import type { SessionType } from "../lib/types";
 
 function formatRelativeTime(dateStr: string): string {
   const now = Date.now();
@@ -39,11 +41,12 @@ interface NewSessionModalProps {
     name: string;
     working_directory: string;
     skip_permissions: boolean;
-    initial_prompt?: string;
+    session_type?: string;
   }) => Promise<void>;
   defaultDirectory?: string;
   recentSessions?: RecentSession[];
   onReopenRecent?: (session: RecentSession) => void;
+  sessionTypes?: SessionType[];
 }
 
 export function NewSessionModal({
@@ -53,16 +56,38 @@ export function NewSessionModal({
   defaultDirectory,
   recentSessions = [],
   onReopenRecent,
+  sessionTypes = [],
 }: NewSessionModalProps) {
+  const enabledTypes = useMemo(
+    () => sessionTypes.filter((t) => t.enabled),
+    [sessionTypes],
+  );
+
   const [name, setName] = useState("");
   const [directory, setDirectory] = useState(defaultDirectory ?? "");
   const [skipPermissions, setSkipPermissions] = useState(false);
-  const [initialPrompt, setInitialPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [selectedType, setSelectedType] = useState(
+    () => enabledTypes[0]?.id ?? "claude-code",
+  );
 
   const hasPrevious = recentSessions.length > 0;
+  const currentType = sessionTypes.find((t) => t.id === selectedType);
+  const isClaudeType = selectedType === "claude-code";
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setName("");
+      setDirectory(defaultDirectory ?? "");
+      setSkipPermissions(false);
+      setSelectedType(enabledTypes[0]?.id ?? "claude-code");
+      setError(null);
+      setFilter("");
+    }
+  }, [isOpen, defaultDirectory, enabledTypes]);
 
   const filteredSessions = useMemo(() => {
     if (!filter.trim()) return recentSessions;
@@ -85,7 +110,8 @@ export function NewSessionModal({
     e.preventDefault();
     setError(null);
 
-    if (!name.trim()) {
+    const finalName = name.trim();
+    if (!finalName) {
       setError("Name is required");
       return;
     }
@@ -97,17 +123,11 @@ export function NewSessionModal({
     setIsSubmitting(true);
     try {
       await onCreate({
-        name: name.trim(),
+        name: finalName,
         working_directory: directory.trim(),
         skip_permissions: skipPermissions,
-        initial_prompt: initialPrompt.trim() || undefined,
+        session_type: selectedType,
       });
-      // Reset form
-      setName("");
-      setDirectory(defaultDirectory ?? "");
-      setSkipPermissions(false);
-      setInitialPrompt("");
-      setFilter("");
       onClose();
     } catch (err) {
       setError(String(err));
@@ -122,6 +142,39 @@ export function NewSessionModal({
         <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
           Create New
         </h3>
+      )}
+
+      {/* Session Type Picker */}
+      {enabledTypes.length > 0 ? (
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-2">
+            Type
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {enabledTypes.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setSelectedType(st.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                  selectedType === st.id
+                    ? "bg-white/80 shadow-md border border-white/60 font-medium"
+                    : "bg-white/20 border border-transparent hover:bg-white/40"
+                }`}
+                style={{
+                  color: selectedType === st.id ? st.color : undefined,
+                }}
+              >
+                <SessionTypeIcon icon={st.icon} className="text-base" />
+                <span className="text-slate-700">{st.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
+          No session types enabled. Enable types in Settings.
+        </p>
       )}
 
       <div>
@@ -160,25 +213,13 @@ export function NewSessionModal({
         </div>
       </div>
 
-      <Toggle
-        checked={skipPermissions}
-        onChange={setSkipPermissions}
-        label="Skip permission prompts"
-      />
-
-      <div>
-        <label className="block text-sm font-medium text-slate-600 mb-1">
-          Initial Prompt{" "}
-          <span className="text-slate-400 font-normal">(optional)</span>
-        </label>
-        <textarea
-          value={initialPrompt}
-          onChange={(e) => setInitialPrompt(e.target.value)}
-          placeholder="What should Claude start working on?"
-          rows={3}
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400 resize-none"
+      {isClaudeType && (
+        <Toggle
+          checked={skipPermissions}
+          onChange={setSkipPermissions}
+          label="Skip permission prompts"
         />
-      </div>
+      )}
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
@@ -192,10 +233,15 @@ export function NewSessionModal({
         </button>
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || enabledTypes.length === 0}
           className="px-5 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition-colors disabled:opacity-50 shadow-md"
+          style={{
+            backgroundColor: currentType?.color ?? undefined,
+          }}
         >
-          {isSubmitting ? "Creating..." : "Create Session"}
+          {isSubmitting
+            ? "Creating..."
+            : `Create ${currentType?.name ?? "Session"}`}
         </button>
       </div>
     </form>

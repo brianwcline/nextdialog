@@ -1,9 +1,14 @@
 import { useRef } from "react";
 import { useGradient } from "../hooks/useGradient";
+import type { SessionStatus } from "../lib/types";
 
-export function ShiftingGradient() {
+interface ShiftingGradientProps {
+  sessionStatuses?: SessionStatus[];
+}
+
+export function ShiftingGradient({ sessionStatuses }: ShiftingGradientProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  useGradient({ canvasRef });
+  useGradient({ canvasRef, sessionStatuses });
 
   return (
     <div className="fixed inset-0 -z-10">

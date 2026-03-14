@@ -1,11 +1,50 @@
 import { useEffect, useRef } from "react";
+import type { SessionStatus } from "../lib/types";
 
 interface GradientConfig {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  sessionStatuses?: SessionStatus[];
 }
 
-export function useGradient({ canvasRef }: GradientConfig) {
+function computeMoodHues(statuses: SessionStatus[]): [number, number, number] {
+  if (statuses.length === 0) return [240, 260, 220]; // default cool blue/purple
+
+  const hasError = statuses.some((s) => s === "error");
+  const hasWaiting = statuses.some((s) => s === "waiting");
+  const workingCount = statuses.filter((s) => s === "working").length;
+  const allIdle = statuses.every(
+    (s) => s === "idle" || s === "stopped",
+  );
+
+  if (hasError) {
+    // Warm red shift
+    return [0, 20, 340];
+  }
+  if (hasWaiting) {
+    // Amber warmth
+    return [30, 45, 15];
+  }
+  if (workingCount > statuses.length / 2) {
+    // Energetic purple/indigo
+    return [270, 290, 250];
+  }
+  if (allIdle) {
+    // Cool blue/green
+    return [180, 200, 160];
+  }
+  // Mixed/default
+  return [240, 260, 220];
+}
+
+export function useGradient({ canvasRef, sessionStatuses = [] }: GradientConfig) {
   const frameRef = useRef<number>(0);
+  const targetHuesRef = useRef<[number, number, number]>([240, 260, 220]);
+  const currentHuesRef = useRef<[number, number, number]>([240, 260, 220]);
+
+  // Update target hues when statuses change
+  useEffect(() => {
+    targetHuesRef.current = computeMoodHues(sessionStatuses);
+  }, [sessionStatuses.join(",")]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -28,6 +67,13 @@ export function useGradient({ canvasRef }: GradientConfig) {
       const w = canvas.width;
       const h = canvas.height;
 
+      // Lerp current hues toward target (smooth 2s transition)
+      const lerpRate = 0.02;
+      for (let i = 0; i < 3; i++) {
+        const diff = targetHuesRef.current[i] - currentHuesRef.current[i];
+        currentHuesRef.current[i] += diff * lerpRate;
+      }
+
       // Base fill
       ctx.fillStyle = "#F0EEFF";
       ctx.fillRect(0, 0, w, h);
@@ -36,19 +82,19 @@ export function useGradient({ canvasRef }: GradientConfig) {
       const blobs = [
         {
           period: 7,
-          hue: 240,
+          hue: currentHuesRef.current[0],
           x: 0.3 + 0.2 * Math.sin(t / 7),
           y: 0.3 + 0.2 * Math.cos(t / 9),
         },
         {
           period: 11,
-          hue: 260,
+          hue: currentHuesRef.current[1],
           x: 0.7 + 0.15 * Math.sin(t / 11),
           y: 0.6 + 0.2 * Math.cos(t / 7),
         },
         {
           period: 13,
-          hue: 220,
+          hue: currentHuesRef.current[2],
           x: 0.5 + 0.25 * Math.sin(t / 13),
           y: 0.4 + 0.15 * Math.cos(t / 11),
         },
