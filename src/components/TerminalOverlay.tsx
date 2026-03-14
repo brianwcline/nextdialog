@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTerminal } from "../hooks/useTerminal";
@@ -92,30 +93,40 @@ export function TerminalOverlay({
     };
   }, [isOpen, session.id]);
 
-  // Always render, but hide when not open — preserves xterm DOM and scrollback
+  // Always render, but animate visibility — preserves xterm DOM and scrollback
   return (
-    <div
+    <motion.div
       className="fixed inset-0 z-50 flex items-center justify-center p-8"
+      initial={false}
+      animate={{
+        opacity: isOpen ? 1 : 0,
+        pointerEvents: isOpen ? "auto" : "none",
+      }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
       style={{
         visibility: isOpen ? "visible" : "hidden",
-        pointerEvents: isOpen ? "auto" : "none",
-        opacity: isOpen ? 1 : 0,
-        transition: "opacity 0.2s ease",
       }}
     >
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/10 backdrop-blur-sm"
+      <motion.div
+        className="absolute inset-0 bg-black/10"
+        initial={false}
+        animate={{
+          backdropFilter: isOpen ? "blur(8px)" : "blur(0px)",
+        }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
         onClick={onClose}
       />
 
       {/* Terminal window */}
-      <div
+      <motion.div
         className="relative w-full h-full max-w-5xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col bg-[#1E1E2E]"
-        style={{
-          transform: isOpen ? "scale(1) translateY(0)" : "scale(0.95) translateY(10px)",
-          transition: "transform 0.2s ease",
+        initial={false}
+        animate={{
+          scale: isOpen ? 1 : 0.97,
+          y: isOpen ? 0 : 10,
         }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#181825] border-b border-slate-700/50">
@@ -214,7 +225,7 @@ export function TerminalOverlay({
 
         {/* Terminal container */}
         <div ref={containerRef} className="flex-1 p-1" />
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

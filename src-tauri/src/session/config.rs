@@ -13,6 +13,14 @@ pub struct SessionConfig {
     pub last_active: DateTime<Utc>,
     #[serde(default = "default_status")]
     pub status: String,
+    #[serde(default = "default_session_type")]
+    pub session_type: String,
+    #[serde(default)]
+    pub parked: bool,
+}
+
+fn default_session_type() -> String {
+    "claude-code".to_string()
 }
 
 fn default_status() -> String {
@@ -26,4 +34,6 @@ pub struct CreateSessionRequest {
     #[serde(default)]
     pub skip_permissions: bool,
     pub initial_prompt: Option<String>,
+    #[serde(default = "default_session_type")]
+    pub session_type: String,
 }

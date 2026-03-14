@@ -65,6 +65,8 @@ impl SessionManager {
             created_at: now,
             last_active: now,
             status: "stopped".to_string(),
+            session_type: req.session_type,
+            parked: false,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -96,5 +98,13 @@ impl SessionManager {
 
     pub fn get(&self, id: &str) -> Option<SessionConfig> {
         self.sessions.lock().unwrap().iter().find(|s| s.id == id).cloned()
+    }
+
+    pub fn set_parked(&self, id: &str, parked: bool) {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(session) = sessions.iter_mut().find(|s| s.id == id) {
+            session.parked = parked;
+        }
+        self.persist(&sessions);
     }
 }

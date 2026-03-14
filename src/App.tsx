@@ -7,8 +7,11 @@ import { NewSessionModal } from "./components/NewSessionModal";
 import { TerminalOverlay } from "./components/TerminalOverlay";
 import { ContextMenu } from "./components/ContextMenu";
 import { SettingsView } from "./components/SettingsView";
+import { AttentionIndicator } from "./components/AttentionIndicator";
+import { SessionDock } from "./components/SessionDock";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
+import { useSessionTypes } from "./hooks/useSessionTypes";
 import {
   getRecentSessions,
   addRecentSession,
@@ -53,9 +56,19 @@ class ErrorBoundary extends Component<
 }
 
 function AppContent() {
-  const { sessions, createSession, removeSession } = useSession();
+  const { sessions, createSession, removeSession, loadSessions } = useSession();
   const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions]);
   useStatus(sessionIds);
+  const { sessionTypes, updateType, createType, deleteType } = useSessionTypes();
+
+  const activeSessions = useMemo(
+    () => sessions.filter((s) => !s.parked),
+    [sessions],
+  );
+  const parkedSessions = useMemo(
+    () => sessions.filter((s) => s.parked),
+    [sessions],
+  );
 
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>(() =>
     getRecentSessions(),
@@ -70,7 +83,6 @@ function AppContent() {
     y: number;
   } | null>(null);
   const [spawnedIds, setSpawnedIds] = useState<string[]>([]);
-  // Ref guards against double-spawn from StrictMode or rapid clicks
   const spawningRef = useRef<Set<string>>(new Set());
 
   const handleSelectSession = useCallback(async (id: string) => {
@@ -91,7 +103,7 @@ function AppContent() {
       name: string;
       working_directory: string;
       skip_permissions: boolean;
-      initial_prompt?: string;
+      session_type?: string;
     }) => {
       const session = await createSession(params);
       await handleSelectSession(session.id);
@@ -135,7 +147,6 @@ function AppContent() {
   const handleRemoveSession = useCallback(
     async (id: string) => {
       try {
-        // Stash session config for "recent sessions" before removing
         const session = sessions.find((s) => s.id === id);
         if (session) {
           addRecentSession({
@@ -162,10 +173,37 @@ function AppContent() {
     [activeSessionId, removeSession, sessions],
   );
 
+  const handleParkSession = useCallback(
+    async (id: string) => {
+      try {
+        await invoke("park_session", { id });
+        await loadSessions();
+        if (activeSessionId === id) {
+          setActiveSessionId(null);
+        }
+      } catch (err) {
+        console.error("Failed to park session:", err);
+      }
+    },
+    [activeSessionId, loadSessions],
+  );
+
+  const handleUnparkSession = useCallback(
+    async (id: string) => {
+      try {
+        await invoke("unpark_session", { id });
+        await loadSessions();
+        await handleSelectSession(id);
+      } catch (err) {
+        console.error("Failed to unpark session:", err);
+      }
+    },
+    [loadSessions, handleSelectSession],
+  );
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Don't capture when modals are open or terminal is focused
       if (activeSessionId) return;
 
       if (e.metaKey && e.key === "n") {
@@ -173,19 +211,18 @@ function AppContent() {
         setShowNewSession(true);
       }
 
-      // Cmd+1-9: jump to nth session
       if (e.metaKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         const idx = parseInt(e.key) - 1;
-        if (idx < sessions.length) {
-          handleSelectSession(sessions[idx].id);
+        if (idx < activeSessions.length) {
+          handleSelectSession(activeSessions[idx].id);
         }
       }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeSessionId, sessions, handleSelectSession]);
+  }, [activeSessionId, activeSessions, handleSelectSession]);
 
   const contextMenuItems = contextMenu
     ? [
@@ -196,6 +233,19 @@ function AppContent() {
         {
           label: "Restart",
           onClick: () => handleRestartSession(contextMenu.id),
+        },
+        {
+          label: sessions.find((s) => s.id === contextMenu.id)?.parked
+            ? "Unpark"
+            : "Park",
+          onClick: () => {
+            const s = sessions.find((s) => s.id === contextMenu.id);
+            if (s?.parked) {
+              handleUnparkSession(contextMenu.id);
+            } else {
+              handleParkSession(contextMenu.id);
+            }
+          },
         },
         {
           label: "End Session",
@@ -209,15 +259,24 @@ function AppContent() {
       ]
     : [];
 
+  const typeMap = useMemo(() => {
+    const map: Record<string, typeof sessionTypes[0]> = {};
+    for (const t of sessionTypes) {
+      map[t.id] = t;
+    }
+    return map;
+  }, [sessionTypes]);
+
   return (
     <>
-      <ShiftingGradient />
+      <ShiftingGradient sessionStatuses={sessions.map((s) => s.status)} />
       <HomeView
-        sessions={sessions}
+        sessions={activeSessions}
         onNewSession={() => setShowNewSession(true)}
         onSelectSession={handleSelectSession}
         onSessionContextMenu={handleContextMenu}
         onOpenSettings={() => setShowSettings(true)}
+        sessionTypeMap={typeMap}
       />
       <NewSessionModal
         isOpen={showNewSession}
@@ -230,13 +289,17 @@ function AppContent() {
             name: recent.name,
             working_directory: recent.working_directory,
             skip_permissions: recent.skip_permissions,
-            initial_prompt: recent.initial_prompt,
           });
         }}
+        sessionTypes={sessionTypes}
       />
       <SettingsView
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+        sessionTypes={sessionTypes}
+        onUpdateType={updateType}
+        onCreateType={createType}
+        onDeleteType={deleteType}
       />
       {spawnedIds.map((id) => {
         const session = sessions.find((s) => s.id === id);
@@ -253,6 +316,15 @@ function AppContent() {
           />
         );
       })}
+      <SessionDock
+        sessions={parkedSessions}
+        onUnpark={handleUnparkSession}
+        sessionTypeMap={typeMap}
+      />
+      <AttentionIndicator
+        sessions={sessions}
+        onSelect={handleSelectSession}
+      />
       <ContextMenu
         isOpen={contextMenu !== null}
         x={contextMenu?.x ?? 0}

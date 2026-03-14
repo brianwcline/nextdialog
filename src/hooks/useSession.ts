@@ -21,12 +21,14 @@ export function useSession() {
       working_directory: string;
       skip_permissions: boolean;
       initial_prompt?: string;
+      session_type?: string;
     }) => {
       const session = await invoke<Session>("create_session", {
         name: params.name,
         workingDirectory: params.working_directory,
         skipPermissions: params.skip_permissions,
         initialPrompt: params.initial_prompt ?? null,
+        sessionType: params.session_type ?? null,
       });
       dispatch({ type: "ADD_SESSION", session });
       return session;

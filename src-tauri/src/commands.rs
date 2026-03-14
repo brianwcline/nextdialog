@@ -3,8 +3,12 @@ use tauri::{AppHandle, State};
 use crate::clipboard::bridge::save_clipboard_image;
 use crate::pty::pool::PtyPool;
 use crate::session::config::{CreateSessionRequest, SessionConfig};
+use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
+use crate::session::types::{SessionType, SessionTypeManager};
 use crate::settings::{Settings, SettingsManager};
+
+// ── Session CRUD ──
 
 #[tauri::command]
 pub fn list_sessions(manager: State<'_, SessionManager>) -> Vec<SessionConfig> {
@@ -18,12 +22,14 @@ pub fn create_session(
     working_directory: String,
     skip_permissions: bool,
     initial_prompt: Option<String>,
+    session_type: Option<String>,
 ) -> Result<SessionConfig, String> {
     manager.create(CreateSessionRequest {
         name,
         working_directory,
         skip_permissions,
         initial_prompt,
+        session_type: session_type.unwrap_or_else(|| "claude-code".to_string()),
     })
 }
 
@@ -32,10 +38,14 @@ pub fn remove_session(manager: State<'_, SessionManager>, id: String) -> Result<
     manager.remove(&id)
 }
 
+// ── PTY lifecycle ──
+
 #[tauri::command]
 pub fn spawn_pty_session(
     pool: State<'_, PtyPool>,
     manager: State<'_, SessionManager>,
+    type_manager: State<'_, SessionTypeManager>,
+    file_tracker: State<'_, FileTracker>,
     app_handle: AppHandle,
     id: String,
     rows: Option<u16>,
@@ -45,8 +55,13 @@ pub fn spawn_pty_session(
         .get(&id)
         .ok_or_else(|| format!("Session not found: {id}"))?;
 
+    let session_type = type_manager
+        .get(&session.session_type)
+        .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
+
     pool.spawn(
         &id,
+        &session_type,
         &session.working_directory,
         session.skip_permissions,
         session.initial_prompt.as_deref(),
@@ -55,6 +70,7 @@ pub fn spawn_pty_session(
         &app_handle,
     )?;
 
+    file_tracker.register_session(&id, &session.working_directory);
     manager.update_status(&id, "starting");
     Ok(())
 }
@@ -78,9 +94,11 @@ pub fn resize_pty(
 pub fn kill_pty_session(
     pool: State<'_, PtyPool>,
     manager: State<'_, SessionManager>,
+    file_tracker: State<'_, FileTracker>,
     id: String,
 ) -> Result<(), String> {
     pool.kill(&id)?;
+    file_tracker.unregister_session(&id);
     manager.update_status(&id, "stopped");
     Ok(())
 }
@@ -89,6 +107,7 @@ pub fn kill_pty_session(
 pub fn restart_pty_session(
     pool: State<'_, PtyPool>,
     manager: State<'_, SessionManager>,
+    type_manager: State<'_, SessionTypeManager>,
     app_handle: AppHandle,
     id: String,
     rows: Option<u16>,
@@ -98,8 +117,13 @@ pub fn restart_pty_session(
         .get(&id)
         .ok_or_else(|| format!("Session not found: {id}"))?;
 
+    let session_type = type_manager
+        .get(&session.session_type)
+        .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
+
     pool.restart(
         &id,
+        &session_type,
         &session.working_directory,
         session.skip_permissions,
         rows.unwrap_or(24),
@@ -110,6 +134,20 @@ pub fn restart_pty_session(
     manager.update_status(&id, "starting");
     Ok(())
 }
+
+// ── Preview ──
+
+#[tauri::command]
+pub fn get_session_preview(pool: State<'_, PtyPool>, id: String) -> Vec<String> {
+    pool.get_preview(&id)
+}
+
+#[tauri::command]
+pub fn get_session_activity(pool: State<'_, PtyPool>, id: String) -> Vec<u32> {
+    pool.get_activity(&id)
+}
+
+// ── Clipboard ──
 
 #[tauri::command]
 pub fn check_and_paste_clipboard_image(
@@ -125,6 +163,8 @@ pub fn check_and_paste_clipboard_image(
     }
 }
 
+// ── Settings ──
+
 #[tauri::command]
 pub fn get_settings(manager: State<'_, SettingsManager>) -> Settings {
     manager.get()
@@ -133,4 +173,54 @@ pub fn get_settings(manager: State<'_, SettingsManager>) -> Settings {
 #[tauri::command]
 pub fn save_settings(manager: State<'_, SettingsManager>, settings: Settings) {
     manager.save(settings);
+}
+
+// ── Session Parking ──
+
+#[tauri::command]
+pub fn park_session(manager: State<'_, SessionManager>, id: String) {
+    manager.set_parked(&id, true);
+}
+
+#[tauri::command]
+pub fn unpark_session(manager: State<'_, SessionManager>, id: String) {
+    manager.set_parked(&id, false);
+}
+
+// ── File Conflicts ──
+
+#[tauri::command]
+pub fn get_file_conflicts(tracker: State<'_, FileTracker>) -> Vec<FileConflict> {
+    tracker.get_conflicts()
+}
+
+// ── Session Types ──
+
+#[tauri::command]
+pub fn list_session_types(manager: State<'_, SessionTypeManager>) -> Vec<SessionType> {
+    manager.list()
+}
+
+#[tauri::command]
+pub fn create_session_type(
+    manager: State<'_, SessionTypeManager>,
+    session_type: SessionType,
+) -> Result<SessionType, String> {
+    manager.create(session_type)
+}
+
+#[tauri::command]
+pub fn update_session_type(
+    manager: State<'_, SessionTypeManager>,
+    session_type: SessionType,
+) -> Result<SessionType, String> {
+    manager.update(session_type)
+}
+
+#[tauri::command]
+pub fn delete_session_type(
+    manager: State<'_, SessionTypeManager>,
+    id: String,
+) -> Result<(), String> {
+    manager.delete(&id)
 }

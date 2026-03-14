@@ -1,6 +1,11 @@
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import type { Session } from "../lib/types";
+import type { Session, SessionType } from "../lib/types";
 import { SessionCard } from "./SessionCard";
+import {
+  groupByDirectory,
+  abbreviateDirectory,
+} from "../lib/groupSessions";
 
 interface HomeViewProps {
   sessions: Session[];
@@ -8,6 +13,7 @@ interface HomeViewProps {
   onSelectSession: (id: string) => void;
   onSessionContextMenu: (id: string, e: React.MouseEvent) => void;
   onOpenSettings: () => void;
+  sessionTypeMap?: Record<string, SessionType>;
 }
 
 function EmptyState({ onNewSession }: { onNewSession: () => void }) {
@@ -39,7 +45,43 @@ export function HomeView({
   onSelectSession,
   onSessionContextMenu,
   onOpenSettings,
+  sessionTypeMap = {},
 }: HomeViewProps) {
+  const [grouped, setGrouped] = useState(() => {
+    try {
+      return localStorage.getItem("nextdialog:grouped") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleGrouped = () => {
+    const next = !grouped;
+    setGrouped(next);
+    try {
+      localStorage.setItem("nextdialog:grouped", String(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const groups = useMemo(
+    () => (grouped ? groupByDirectory(sessions) : null),
+    [grouped, sessions],
+  );
+
+  const renderCards = (cards: Session[], startIndex: number) =>
+    cards.map((session, i) => (
+      <SessionCard
+        key={session.id}
+        session={session}
+        index={startIndex + i}
+        onClick={() => onSelectSession(session.id)}
+        onContextMenu={(e) => onSessionContextMenu(session.id, e)}
+        sessionType={sessionTypeMap[session.session_type]}
+      />
+    ));
+
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
@@ -55,6 +97,19 @@ export function HomeView({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {sessions.length > 1 && (
+            <button
+              onClick={toggleGrouped}
+              className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                grouped
+                  ? "bg-indigo-100/60 text-indigo-600"
+                  : "text-slate-500 hover:bg-white/30"
+              }`}
+              title="Group by project"
+            >
+              {grouped ? "Grouped" : "Group"}
+            </button>
+          )}
           <button
             onClick={onOpenSettings}
             className="p-2 rounded-lg text-slate-500 hover:bg-white/30 transition-colors text-sm"
@@ -78,17 +133,32 @@ export function HomeView({
         <EmptyState onNewSession={onNewSession} />
       ) : (
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          <div className="flex flex-wrap gap-5 justify-center">
-            {sessions.map((session, i) => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                index={i}
-                onClick={() => onSelectSession(session.id)}
-                onContextMenu={(e) => onSessionContextMenu(session.id, e)}
-              />
-            ))}
-          </div>
+          {groups ? (
+            <div className="space-y-6">
+              {groups.map((group) => {
+                const showHeader = groups.length > 1;
+                const startIdx = sessions.findIndex(
+                  (s) => s.id === group.sessions[0]?.id,
+                );
+                return (
+                  <div key={group.directory}>
+                    {showHeader && (
+                      <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3 font-mono">
+                        {abbreviateDirectory(group.directory)}
+                      </h3>
+                    )}
+                    <div className="flex flex-wrap gap-5">
+                      {renderCards(group.sessions, startIdx)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-5 justify-center">
+              {renderCards(sessions, 0)}
+            </div>
+          )}
         </div>
       )}
     </div>

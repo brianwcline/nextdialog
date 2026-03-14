@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -6,6 +6,8 @@ use std::time::Duration;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use tauri::{AppHandle, Emitter};
 
+use crate::pty::activity::ActivityTracker;
+use crate::session::types::SessionType;
 use crate::status::detector::{SessionStatus, StatusDetector};
 
 struct PtySession {
@@ -17,6 +19,9 @@ struct PtySession {
 pub struct PtyPool {
     sessions: Mutex<HashMap<String, PtySession>>,
     detectors: Arc<Mutex<HashMap<String, Arc<Mutex<StatusDetector>>>>>,
+    preview_lines: Arc<Mutex<HashMap<String, Arc<Mutex<VecDeque<String>>>>>>,
+    activity_trackers: Arc<Mutex<HashMap<String, Arc<Mutex<ActivityTracker>>>>>,
+    app_handle: Mutex<Option<AppHandle>>,
 }
 
 impl PtyPool {
@@ -24,22 +29,33 @@ impl PtyPool {
         let detectors: Arc<Mutex<HashMap<String, Arc<Mutex<StatusDetector>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
 
-        // Silence checker thread — runs every 500ms
-        let detectors_clone = detectors.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_millis(500));
-            // We can't emit events here without an AppHandle, so we just
-            // update the detector state. The frontend polls via events.
-            let map = detectors_clone.lock().unwrap();
-            for (_id, detector) in map.iter() {
-                let _ = detector.lock().unwrap().check_silence(2.0);
-            }
-        });
-
         Self {
             sessions: Mutex::new(HashMap::new()),
             detectors,
+            preview_lines: Arc::new(Mutex::new(HashMap::new())),
+            activity_trackers: Arc::new(Mutex::new(HashMap::new())),
+            app_handle: Mutex::new(None),
         }
+    }
+
+    fn ensure_silence_checker(&self, app_handle: &AppHandle) {
+        let mut handle_guard = self.app_handle.lock().unwrap();
+        if handle_guard.is_some() {
+            return; // Already started
+        }
+        *handle_guard = Some(app_handle.clone());
+
+        let detectors = self.detectors.clone();
+        let handle = app_handle.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_millis(500));
+            let map = detectors.lock().unwrap();
+            for (id, detector) in map.iter() {
+                if let Some(SessionStatus::Idle) = detector.lock().unwrap().check_silence(2.0) {
+                    let _ = handle.emit(&format!("session-status-{id}"), "idle");
+                }
+            }
+        });
     }
 
     fn spawn_inner(
@@ -49,7 +65,9 @@ impl PtyPool {
         rows: u16,
         cols: u16,
         app_handle: &AppHandle,
+        status_patterns: Option<&HashMap<String, String>>,
     ) -> Result<(), String> {
+        self.ensure_silence_checker(app_handle);
         let pty_system = native_pty_system();
 
         let pair = pty_system
@@ -64,7 +82,7 @@ impl PtyPool {
         let child = pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| format!("Failed to spawn claude: {e}"))?;
+            .map_err(|e| format!("Failed to spawn command: {e}"))?;
 
         drop(pair.slave);
 
@@ -78,12 +96,26 @@ impl PtyPool {
             .take_writer()
             .map_err(|e| format!("Failed to take writer: {e}"))?;
 
-        // Create status detector for this session
-        let detector = Arc::new(Mutex::new(StatusDetector::new()));
+        // Create status detector for this session (with optional custom patterns)
+        let detector = Arc::new(Mutex::new(StatusDetector::with_patterns(status_patterns)));
         self.detectors
             .lock()
             .unwrap()
             .insert(id.to_string(), detector.clone());
+
+        // Create preview lines buffer (capacity 8, return last 5)
+        let preview = Arc::new(Mutex::new(VecDeque::with_capacity(8)));
+        self.preview_lines
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), preview.clone());
+
+        // Create activity tracker
+        let activity = Arc::new(Mutex::new(ActivityTracker::new()));
+        self.activity_trackers
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), activity.clone());
 
         // Reader thread — OS thread, not tokio
         let session_id = id.to_string();
@@ -104,22 +136,78 @@ impl PtyPool {
                     }
                     Ok(n) => {
                         // Status detection tap — process before emitting
-                        if let Some(new_status) =
-                            detector.lock().unwrap().process_bytes(&buf[..n])
                         {
-                            let status_str = match new_status {
-                                SessionStatus::Stopped => "stopped",
-                                SessionStatus::Starting => "starting",
-                                SessionStatus::Idle => "idle",
-                                SessionStatus::Working => "working",
-                                SessionStatus::Planning => "planning",
-                                SessionStatus::Waiting => "waiting",
-                                SessionStatus::Error => "error",
-                            };
-                            let _ = handle.emit(
-                                &format!("session-status-{session_id}"),
-                                status_str,
-                            );
+                            let mut det = detector.lock().unwrap();
+                            if let Some(new_status) = det.process_bytes(&buf[..n]) {
+                                let status_str = match new_status {
+                                    SessionStatus::Stopped => "stopped",
+                                    SessionStatus::Starting => "starting",
+                                    SessionStatus::Idle => "idle",
+                                    SessionStatus::Working => "working",
+                                    SessionStatus::Planning => "planning",
+                                    SessionStatus::Waiting => "waiting",
+                                    SessionStatus::Error => "error",
+                                };
+                                let _ = handle.emit(
+                                    &format!("session-status-{session_id}"),
+                                    status_str,
+                                );
+
+                                // Emit plan summary when entering planning mode
+                                if new_status == SessionStatus::Planning {
+                                    if let Some(ref summary) = det.extras().plan_summary {
+                                        let _ = handle.emit(
+                                            &format!("session-plan-{session_id}"),
+                                            summary.clone(),
+                                        );
+                                    }
+                                }
+                            }
+
+                            // Emit context usage updates
+                            if let Some(usage) = det.extras().context_usage {
+                                let _ = handle.emit(
+                                    &format!("session-context-{session_id}"),
+                                    usage,
+                                );
+                            }
+                        }
+
+                        // Record activity (byte count per minute bucket)
+                        activity.lock().unwrap().record(n as u32);
+
+                        // Update preview lines (last 8 meaningful lines)
+                        {
+                            let stripped = strip_ansi_escapes::strip(&buf[..n]);
+                            let text = String::from_utf8_lossy(&stripped);
+                            let mut pv = preview.lock().unwrap();
+                            for line in text.split('\n') {
+                                let trimmed = line.trim();
+                                if trimmed.is_empty() {
+                                    continue;
+                                }
+                                // Skip decorative/noise lines: mostly box-drawing,
+                                // dashes, dots, or other non-alphanumeric chars
+                                let alpha_count = trimmed.chars()
+                                    .filter(|c| c.is_alphanumeric())
+                                    .count();
+                                if alpha_count < 3 {
+                                    continue;
+                                }
+                                let capped = if trimmed.len() > 200 {
+                                    let mut end = 200;
+                                    while !trimmed.is_char_boundary(end) {
+                                        end -= 1;
+                                    }
+                                    &trimmed[..end]
+                                } else {
+                                    trimmed
+                                };
+                                if pv.len() >= 8 {
+                                    pv.pop_front();
+                                }
+                                pv.push_back(capped.to_string());
+                            }
                         }
 
                         // Prepend any leftover bytes from previous read
@@ -173,6 +261,7 @@ impl PtyPool {
     pub fn spawn(
         &self,
         id: &str,
+        session_type: &SessionType,
         cwd: &str,
         skip_permissions: bool,
         initial_prompt: Option<&str>,
@@ -180,21 +269,48 @@ impl PtyPool {
         cols: u16,
         app_handle: &AppHandle,
     ) -> Result<(), String> {
-        let mut cmd = CommandBuilder::new("claude");
-        if skip_permissions {
-            cmd.arg("--dangerously-skip-permissions");
+        // Split command on whitespace to support multi-word commands (e.g. "python3 -m myagent")
+        let parts: Vec<&str> = session_type.command.split_whitespace().collect();
+        let mut cmd = CommandBuilder::new(parts.first().unwrap_or(&""));
+        for part in parts.iter().skip(1) {
+            cmd.arg(part);
         }
-        if let Some(prompt) = initial_prompt {
-            if !prompt.is_empty() {
-                cmd.arg("--prompt");
-                cmd.arg(prompt);
+
+        // Add session type's default args
+        for arg in &session_type.args {
+            cmd.arg(arg);
+        }
+
+        // Claude-specific flags
+        if session_type.id == "claude-code" {
+            if skip_permissions {
+                cmd.arg("--dangerously-skip-permissions");
+            }
+            if let Some(prompt) = initial_prompt {
+                if !prompt.is_empty() {
+                    cmd.arg("--prompt");
+                    cmd.arg(prompt);
+                }
             }
         }
+
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("LANG", "en_US.UTF-8");
-        self.spawn_inner(id, cmd, rows, cols, app_handle)
+
+        // Add session type's custom env vars
+        for (key, val) in &session_type.env {
+            cmd.env(key, val);
+        }
+
+        let patterns = if session_type.status_patterns.is_empty() {
+            None
+        } else {
+            Some(&session_type.status_patterns)
+        };
+
+        self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
     }
 
     pub fn write(&self, id: &str, data: &[u8]) -> Result<(), String> {
@@ -228,6 +344,28 @@ impl PtyPool {
             .map_err(|e| format!("Resize failed: {e}"))
     }
 
+    pub fn get_activity(&self, id: &str) -> Vec<u32> {
+        self.activity_trackers
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|t| t.lock().unwrap().get_buckets())
+            .unwrap_or_default()
+    }
+
+    pub fn get_preview(&self, id: &str) -> Vec<String> {
+        self.preview_lines
+            .lock()
+            .unwrap()
+            .get(id)
+            .map(|pv| {
+                let buf = pv.lock().unwrap();
+                // Return last 5 lines from the buffer
+                buf.iter().rev().take(5).rev().cloned().collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn kill(&self, id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().unwrap();
         if let Some(mut session) = sessions.remove(id) {
@@ -237,12 +375,15 @@ impl PtyPool {
                 .map_err(|e| format!("Kill failed: {e}"))?;
         }
         self.detectors.lock().unwrap().remove(id);
+        self.preview_lines.lock().unwrap().remove(id);
+        self.activity_trackers.lock().unwrap().remove(id);
         Ok(())
     }
 
     pub fn restart(
         &self,
         id: &str,
+        session_type: &SessionType,
         cwd: &str,
         skip_permissions: bool,
         rows: u16,
@@ -250,15 +391,42 @@ impl PtyPool {
         app_handle: &AppHandle,
     ) -> Result<(), String> {
         self.kill(id)?;
-        let mut cmd = CommandBuilder::new("claude");
-        cmd.arg("--continue");
-        if skip_permissions {
-            cmd.arg("--dangerously-skip-permissions");
+
+        // Split command on whitespace to support multi-word commands
+        let parts: Vec<&str> = session_type.command.split_whitespace().collect();
+        let mut cmd = CommandBuilder::new(parts.first().unwrap_or(&""));
+        for part in parts.iter().skip(1) {
+            cmd.arg(part);
         }
+
+        // Claude-specific: use --continue on restart
+        if session_type.id == "claude-code" {
+            cmd.arg("--continue");
+            if skip_permissions {
+                cmd.arg("--dangerously-skip-permissions");
+            }
+        }
+
+        // Add session type's default args
+        for arg in &session_type.args {
+            cmd.arg(arg);
+        }
+
         cmd.cwd(cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("LANG", "en_US.UTF-8");
-        self.spawn_inner(id, cmd, rows, cols, app_handle)
+
+        for (key, val) in &session_type.env {
+            cmd.env(key, val);
+        }
+
+        let patterns = if session_type.status_patterns.is_empty() {
+            None
+        } else {
+            Some(&session_type.status_patterns)
+        };
+
+        self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
     }
 }
