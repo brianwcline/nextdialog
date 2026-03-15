@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TerminalPane } from "./TerminalPane";
@@ -133,7 +133,7 @@ export function TerminalOverlay({
         opacity: isOpen ? 1 : 0,
         pointerEvents: isOpen ? "auto" : "none",
       }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
+      transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       style={{ visibility: isOpen ? "visible" : "hidden" }}
     >
       {/* Backdrop */}
@@ -141,16 +141,20 @@ export function TerminalOverlay({
         className="absolute inset-0 bg-black/10"
         initial={false}
         animate={{ backdropFilter: isOpen ? "blur(8px)" : "blur(0px)" }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
+        transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
         onClick={onClose}
       />
 
       {/* Terminal window */}
       <motion.div
-        className="relative w-full h-full max-w-5xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col bg-[#1E1E2E]"
+        className="relative w-full h-full max-w-5xl max-h-[85vh] rounded-[2rem] overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col bg-[#1E1E2E]"
         initial={false}
-        animate={{ scale: isOpen ? 1 : 0.97, y: isOpen ? 0 : 10 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
+        animate={{
+          scale: isOpen ? 1 : 0.98,
+          y: isOpen ? 0 : 20,
+          opacity: isOpen ? 1 : 0,
+        }}
+        transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#181825] border-b border-slate-700/50">
@@ -215,8 +219,14 @@ export function TerminalOverlay({
               >
                 ...
               </button>
-              {showMenu && (
-                <div className="absolute right-0 top-full mt-1 min-w-[140px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1 z-10">
+              <AnimatePresence>
+                {showMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.8, 0.25, 1] }}
+                  className="absolute right-0 top-full mt-1 min-w-[140px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1 z-10">
                   <button
                     onClick={() => {
                       setShowMenu(false);
@@ -245,17 +255,18 @@ export function TerminalOverlay({
                   >
                     Remove
                   </button>
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </div>
 
             {/* Close overlay */}
             <button
               onClick={onClose}
               title="Close overlay (session keeps running)"
-              className="text-slate-500 hover:text-slate-300 transition-colors text-lg leading-none px-2 ml-1"
+              className="px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors ml-1"
             >
-              ✕
+              Close
             </button>
           </div>
         </div>

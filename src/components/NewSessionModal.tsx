@@ -301,12 +301,12 @@ export function NewSessionModal({
           onClick={onClose}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            initial={{ opacity: 0, scale: 0.98, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, scale: 0.98, y: 20 }}
+            transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className={`w-full rounded-2xl bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl p-6 ${hasPrevious ? "max-w-3xl" : "max-w-md"}`}
+            className={`w-full rounded-2xl glass-modal shadow-2xl p-6 ${hasPrevious ? "max-w-3xl" : "max-w-md"}`}
           >
             <h2 className="text-lg font-semibold text-slate-800 mb-4">
               New Session

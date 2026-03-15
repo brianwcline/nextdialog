@@ -11,7 +11,7 @@ export function ShiftingGradient({ sessionStatuses }: ShiftingGradientProps) {
   useGradient({ canvasRef, sessionStatuses });
 
   return (
-    <div className="fixed inset-0 -z-10">
+    <div className="fixed -z-10" style={{ inset: "-5%", animation: "breathe 20s ease-in-out infinite alternate" }}>
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
       {/* Dot grid overlay */}
       <div

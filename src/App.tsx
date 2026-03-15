@@ -8,11 +8,13 @@ import { NewSessionModal } from "./components/NewSessionModal";
 import { TerminalOverlay } from "./components/TerminalOverlay";
 import { ContextMenu } from "./components/ContextMenu";
 import { SettingsView } from "./components/SettingsView";
-import { AttentionIndicator } from "./components/AttentionIndicator";
+
 import { SessionDock } from "./components/SessionDock";
+import { FeedbackModal } from "./components/FeedbackModal";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
 import { useSessionTypes } from "./hooks/useSessionTypes";
+import { trackEvent } from "./lib/telemetry";
 import {
   getRecentSessions,
   addRecentSession,
@@ -87,6 +89,7 @@ function AppContent() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showNewSession, setShowNewSession] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     id: string;
     x: number;
@@ -97,8 +100,10 @@ function AppContent() {
 
   const handleSelectSession = useCallback(async (id: string) => {
     setActiveSessionId(id);
+    trackEvent("session.focused", "session-management", undefined, id);
     if (spawningRef.current.has(id)) return;
     spawningRef.current.add(id);
+    trackEvent("session.opened", "session-management", undefined, id);
     try {
       await invoke("spawn_pty_session", { id, rows: null, cols: null });
       setSpawnedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -116,6 +121,7 @@ function AppContent() {
       session_type?: string;
     }) => {
       const session = await createSession(params);
+      trackEvent("session.created", "session-management", { session_type: params.session_type }, session.id);
       await handleSelectSession(session.id);
     },
     [createSession, handleSelectSession],
@@ -141,6 +147,7 @@ function AppContent() {
         setSpawnedIds((prev) => prev.filter((s) => s !== id && !companions.some((c) => c.id === s)));
 
         await invoke("kill_pty_session", { id });
+        trackEvent("session.ended", "session-management", undefined, id);
         spawningRef.current.delete(id);
         if (activeSessionId === id) {
           setActiveSessionId(null);
@@ -155,6 +162,7 @@ function AppContent() {
   const handleRestartSession = useCallback(async (id: string) => {
     try {
       await invoke("restart_pty_session", { id, rows: null, cols: null });
+      trackEvent("session.restarted", "session-management", undefined, id);
       setSpawnedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
     } catch (err) {
       console.error("Failed to restart session:", err);
@@ -188,6 +196,7 @@ function AppContent() {
         await invoke("kill_pty_session", { id }).catch(() => {});
         spawningRef.current.delete(id);
         await removeSession(id);
+        trackEvent("session.removed", "session-management", undefined, id);
         if (activeSessionId === id) {
           setActiveSessionId(null);
         }
@@ -202,6 +211,7 @@ function AppContent() {
     async (id: string) => {
       try {
         await invoke("park_session", { id });
+        trackEvent("session.parked", "session-management", undefined, id);
         await loadSessions();
         if (activeSessionId === id) {
           setActiveSessionId(null);
@@ -217,6 +227,7 @@ function AppContent() {
     async (id: string) => {
       try {
         await invoke("unpark_session", { id });
+        trackEvent("session.unparked", "session-management", undefined, id);
         await loadSessions();
         await handleSelectSession(id);
       } catch (err) {
@@ -229,6 +240,7 @@ function AppContent() {
   const handleAddCompanion = useCallback(async (parentId: string) => {
     try {
       const companion = await invoke<Session>("create_companion", { parentId });
+      trackEvent("companion.added", "companion-terminals", undefined, parentId);
       await loadSessions();
       await invoke("spawn_pty_session", { id: companion.id, rows: null, cols: null });
       setSpawnedIds((prev) => [...prev, companion.id]);
@@ -243,6 +255,7 @@ function AppContent() {
       spawningRef.current.delete(id);
       setSpawnedIds((prev) => prev.filter((s) => s !== id));
       await removeSession(id);
+      trackEvent("companion.removed", "companion-terminals", undefined, id);
     } catch (err) {
       console.error("Failed to remove companion:", err);
     }
@@ -265,6 +278,14 @@ function AppContent() {
       }
     }
   }, [activeSessionId, sessions]);
+
+  // Track app launch once on mount
+  useEffect(() => {
+    trackEvent("app.launched", "app-lifecycle", {
+      session_count: sessions.length,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -348,9 +369,17 @@ function AppContent() {
         onNewSession={() => setShowNewSession(true)}
         onSelectSession={handleSelectSession}
         onSessionContextMenu={handleContextMenu}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={() => {
+          setShowSettings(true);
+          trackEvent("settings.opened", "settings");
+        }}
+        onOpenFeedback={() => {
+          setShowFeedback(true);
+          trackEvent("feedback.opened", "feedback");
+        }}
         sessionTypeMap={typeMap}
         companionCounts={companionCounts}
+        activeSessionId={activeSessionId}
       />
       <NewSessionModal
         isOpen={showNewSession}
@@ -366,6 +395,10 @@ function AppContent() {
           });
         }}
         sessionTypes={sessionTypes}
+      />
+      <FeedbackModal
+        isOpen={showFeedback}
+        onClose={() => setShowFeedback(false)}
       />
       <SettingsView
         isOpen={showSettings}
@@ -398,10 +431,7 @@ function AppContent() {
         onUnpark={handleUnparkSession}
         sessionTypeMap={typeMap}
       />
-      <AttentionIndicator
-        sessions={sessions}
-        onSelect={handleSelectSession}
-      />
+
       <ContextMenu
         isOpen={contextMenu !== null}
         x={contextMenu?.x ?? 0}

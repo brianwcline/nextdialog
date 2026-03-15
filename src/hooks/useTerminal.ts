@@ -108,9 +108,10 @@ export function useTerminal({
       if (!term.element) {
         term.open(container);
       }
-      // Delay fit to let DOM settle
+      // Delay fit to let DOM settle, then scroll to latest content
       requestAnimationFrame(() => {
         fitAddon.fit();
+        term.scrollToBottom();
       });
     }
   }, [visible, containerRef]);

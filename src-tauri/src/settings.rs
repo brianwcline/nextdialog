@@ -3,19 +3,14 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
-    #[serde(default = "default_true")]
-    pub notifications_enabled: bool,
     #[serde(default)]
     pub default_directory: String,
     #[serde(default)]
     pub default_skip_permissions: bool,
-    #[serde(default)]
-    pub sounds_enabled: bool,
-    #[serde(default = "default_volume")]
-    pub sound_volume: f32,
     #[serde(default)]
     pub intelligence_enabled: bool,
     #[serde(default)]
@@ -24,28 +19,23 @@ pub struct Settings {
     pub intelligence_api_key: String,
     #[serde(default)]
     pub intelligence_api_url: String,
-}
-
-fn default_volume() -> f32 {
-    0.5
-}
-
-fn default_true() -> bool {
-    true
+    #[serde(default)]
+    pub machine_id: String,
+    #[serde(default)]
+    pub telemetry_enabled: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            notifications_enabled: true,
             default_directory: String::new(),
             default_skip_permissions: false,
-            sounds_enabled: false,
-            sound_volume: 0.5,
             intelligence_enabled: false,
             intelligence_provider: String::new(),
             intelligence_api_key: String::new(),
             intelligence_api_url: String::new(),
+            machine_id: Uuid::new_v4().to_string(),
+            telemetry_enabled: false,
         }
     }
 }
@@ -65,12 +55,20 @@ impl SettingsManager {
 
         let storage_path = config_dir.join("settings.json");
 
-        let settings = if storage_path.exists() {
+        let mut settings: Settings = if storage_path.exists() {
             let data = fs::read_to_string(&storage_path).unwrap_or_default();
             serde_json::from_str(&data).unwrap_or_default()
         } else {
             Settings::default()
         };
+
+        // Auto-generate machine_id on first launch (or upgrade from older config)
+        if settings.machine_id.is_empty() {
+            settings.machine_id = Uuid::new_v4().to_string();
+            if let Ok(data) = serde_json::to_string_pretty(&settings) {
+                let _ = fs::write(&storage_path, data);
+            }
+        }
 
         Self {
             settings: Mutex::new(settings),
