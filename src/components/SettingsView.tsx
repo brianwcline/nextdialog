@@ -7,15 +7,14 @@ import { SessionTypeIcon } from "./SessionTypeIcon";
 import type { SessionType } from "../lib/types";
 
 interface Settings {
-  notifications_enabled: boolean;
   default_directory: string;
   default_skip_permissions: boolean;
-  sounds_enabled: boolean;
-  sound_volume: number;
   intelligence_enabled: boolean;
   intelligence_provider: string;
   intelligence_api_key: string;
   intelligence_api_url: string;
+  machine_id: string;
+  telemetry_enabled: boolean;
 }
 
 interface SettingsViewProps {
@@ -36,15 +35,14 @@ export function SettingsView({
   onDeleteType,
 }: SettingsViewProps) {
   const [settings, setSettings] = useState<Settings>({
-    notifications_enabled: true,
     default_directory: "",
     default_skip_permissions: false,
-    sounds_enabled: false,
-    sound_volume: 0.5,
     intelligence_enabled: false,
     intelligence_provider: "",
     intelligence_api_key: "",
     intelligence_api_url: "",
+    machine_id: "",
+    telemetry_enabled: false,
   });
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -113,24 +111,18 @@ export function SettingsView({
           onClick={onClose}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            initial={{ opacity: 0, scale: 0.98, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, scale: 0.98, y: 10 }}
+            transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg rounded-2xl bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl p-6 max-h-[85vh] overflow-y-auto"
+            className="w-full max-w-lg rounded-2xl glass-modal shadow-2xl p-6 max-h-[85vh] overflow-y-auto"
           >
             <h2 className="text-lg font-semibold text-slate-800 mb-5">
               Settings
             </h2>
 
             <div className="space-y-5">
-              <Toggle
-                checked={settings.notifications_enabled}
-                onChange={(v) => save({ notifications_enabled: v })}
-                label="Enable notifications"
-              />
-
               <Toggle
                 checked={settings.default_skip_permissions}
                 onChange={(v) => save({ default_skip_permissions: v })}
@@ -167,33 +159,6 @@ export function SettingsView({
                     Browse
                   </button>
                 </div>
-              </div>
-
-              <div className="border-t border-slate-200 pt-4">
-                <Toggle
-                  checked={settings.sounds_enabled}
-                  onChange={(v) => save({ sounds_enabled: v })}
-                  label="Sound effects"
-                />
-
-                {settings.sounds_enabled && (
-                  <div className="mt-3">
-                    <label className="block text-sm font-medium text-slate-600 mb-1">
-                      Volume
-                    </label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.1}
-                      value={settings.sound_volume}
-                      onChange={(e) =>
-                        save({ sound_volume: parseFloat(e.target.value) })
-                      }
-                      className="w-full accent-indigo-500"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Session Types */}
@@ -393,6 +358,21 @@ export function SettingsView({
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Telemetry */}
+              <div className="border-t border-slate-200 pt-4">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                  Usage Data
+                </h3>
+                <Toggle
+                  checked={settings.telemetry_enabled}
+                  onChange={(v) => save({ telemetry_enabled: v })}
+                  label="Share anonymous usage data"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  Helps improve NextDialog. No personal data is collected.
+                </p>
               </div>
             </div>
 

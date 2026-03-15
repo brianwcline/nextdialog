@@ -5,6 +5,7 @@ mod session;
 mod settings;
 mod intelligence;
 mod status;
+mod telemetry;
 
 use tauri::Manager;
 
@@ -14,10 +15,14 @@ use session::manager::SessionManager;
 use session::types::SessionTypeManager;
 use intelligence::IntelligenceManager;
 use settings::SettingsManager;
+use telemetry::TelemetryClient;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let file_tracker = FileTracker::new();
+    let settings_manager = SettingsManager::new();
+    let machine_id = settings_manager.get().machine_id.clone();
+    let telemetry_client = TelemetryClient::new(machine_id);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -26,13 +31,21 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(SessionManager::new())
         .manage(PtyPool::new())
-        .manage(SettingsManager::new())
+        .manage(settings_manager)
         .manage(SessionTypeManager::new())
         .manage(file_tracker)
         .manage(IntelligenceManager::new())
+        .manage(telemetry_client)
         .setup(|app| {
             let tracker = app.state::<FileTracker>();
             tracker.start_polling(app.handle().clone());
+
+            // Spawn background telemetry flush thread (every 30s)
+            let telemetry_clone = app.state::<TelemetryClient>().inner().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                let _ = telemetry_clone.flush();
+            });
 
             Ok(())
         })
@@ -60,6 +73,9 @@ pub fn run() {
             commands::delete_session_type,
             commands::get_session_annotation,
             commands::get_resolved_path,
+            commands::submit_feedback,
+            commands::track_event,
+            commands::flush_telemetry,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

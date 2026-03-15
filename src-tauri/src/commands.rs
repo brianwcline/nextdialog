@@ -8,6 +8,7 @@ use crate::session::manager::SessionManager;
 use crate::session::types::{SessionType, SessionTypeManager};
 use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
+use crate::telemetry::TelemetryClient;
 
 // ── Session CRUD ──
 
@@ -255,6 +256,41 @@ pub fn delete_session_type(
     id: String,
 ) -> Result<(), String> {
     manager.delete(&id)
+}
+
+// ── Telemetry ──
+
+#[tauri::command]
+pub fn submit_feedback(
+    telemetry: State<'_, TelemetryClient>,
+    text: String,
+    severity: String,
+    category: Option<String>,
+    app_state: Option<serde_json::Value>,
+) -> Result<(), String> {
+    telemetry.submit_feedback(text, severity, category, app_state)
+}
+
+#[tauri::command]
+pub fn track_event(
+    telemetry: State<'_, TelemetryClient>,
+    settings: State<'_, SettingsManager>,
+    event_name: String,
+    feature_id: String,
+    properties: Option<serde_json::Value>,
+    session_id: Option<String>,
+    timestamp: Option<String>,
+) -> Result<(), String> {
+    if !settings.get().telemetry_enabled {
+        return Ok(());
+    }
+    telemetry.queue_event(event_name, feature_id, properties, session_id, timestamp);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn flush_telemetry(telemetry: State<'_, TelemetryClient>) -> Result<(), String> {
+    telemetry.flush()
 }
 
 // ── Diagnostics ──

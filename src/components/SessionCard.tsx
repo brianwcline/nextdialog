@@ -5,8 +5,6 @@ import { listen } from "@tauri-apps/api/event";
 import type { Session, SessionType } from "../lib/types";
 import { StatusDot } from "./StatusDot";
 import { TokenBurnBar } from "./TokenBurnBar";
-import { SessionTypeIcon } from "./SessionTypeIcon";
-
 interface SessionCardProps {
   session: Session;
   index: number;
@@ -18,10 +16,10 @@ interface SessionCardProps {
 
 const statusLabels: Record<string, string> = {
   stopped: "Stopped",
-  starting: "Starting...",
+  starting: "Starting",
   idle: "Idle",
-  working: "Working...",
-  planning: "Planning...",
+  working: "Working",
+  planning: "Planning",
   waiting: "Waiting for input",
   error: "Error",
 };
@@ -31,10 +29,8 @@ export function SessionCard({
   index,
   onClick,
   onContextMenu,
-  sessionType,
   companionCount = 0,
 }: SessionCardProps) {
-  const accentColor = sessionType?.color ?? "#6366f1";
   const [preview, setPreview] = useState<string[] | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -94,74 +90,50 @@ export function SessionCard({
     setShowPreview(false);
   }, []);
 
-  const renderStatusLabel = () => {
-    if (session.status === "working") {
-      return <span className="text-xs text-slate-600 min-w-0">Working...</span>;
-    }
-    if (annotation === "__analyzing__") {
-      return (
-        <span className="text-[11px] text-slate-500 animate-pulse min-w-0">
-          Analyzing...
-        </span>
-      );
-    }
-    if (annotation) {
-      return (
-        <span className="text-[11px] text-slate-600 truncate min-w-0" title={annotation}>
-          {annotation}
-        </span>
-      );
-    }
-    return (
-      <span className="text-xs text-slate-600 min-w-0">
-        {statusLabels[session.status] ?? session.status}
-      </span>
-    );
-  };
-
   return (
     <div className="relative" onMouseLeave={handleMouseLeave}>
       <motion.button
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.06, duration: 0.3 }}
-        whileHover={{ y: -3 }}
+        transition={{ delay: index * 0.08, duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
+        whileHover={{ y: -4, scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
         onClick={onClick}
         onContextMenu={onContextMenu}
         onMouseEnter={handleMouseEnter}
-        className="w-[168px] h-[140px] rounded-2xl backdrop-blur-xl bg-white/10 border border-white/15 ring-1 ring-white/10 shadow-sm hover:shadow-md transition-shadow cursor-pointer text-left p-4 flex flex-col justify-between overflow-hidden"
-        style={{
-          borderColor: accentColor ? `${accentColor}30` : undefined,
-        }}
+        className="w-[280px] h-[280px] rounded-[2rem] glass-card cursor-pointer text-left px-6 py-8 flex flex-col justify-between overflow-hidden group"
       >
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1 min-w-0">
-            {sessionType && (
-              <span className="text-base shrink-0" style={{ color: accentColor }}>
-                <SessionTypeIcon icon={sessionType.icon} color={accentColor} />
-              </span>
-            )}
-            <h3 className="text-sm font-semibold text-slate-800 truncate">
+          <div className="flex items-center gap-4 mb-3 min-w-0">
+            <StatusDot status={session.status} />
+            <h3 className="text-2xl font-medium tracking-tight text-slate-800 group-hover:text-slate-900 transition-colors line-clamp-2 leading-tight">
               {session.name}
             </h3>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1 truncate font-mono">
+          <p className="text-sm text-slate-400 font-mono pl-8 truncate group-hover:text-slate-500 transition-colors">
             {session.working_directory.replace(/^\/Users\/[^/]+/, "~")}
           </p>
         </div>
 
         {/* Token burn bar */}
-        {contextUsage !== null && <TokenBurnBar usage={contextUsage} />}
-
-        <div className="flex items-center gap-2 min-w-0">
-          <StatusDot status={session.status} />
-          {renderStatusLabel()}
-        </div>
-        {companionCount > 0 && (
-          <span className="absolute bottom-2 right-2 text-[10px] bg-slate-600/40 text-slate-300 rounded-full px-1.5 py-0.5 font-mono">
-            +{companionCount}
-          </span>
+        {contextUsage !== null && (
+          <div className="pl-8">
+            <TokenBurnBar usage={contextUsage} />
+          </div>
         )}
+
+        <div className="flex items-center justify-between pl-8 mt-auto pt-8">
+          <span className="text-sm font-medium text-slate-400 group-hover:text-slate-600 transition-colors">
+            {annotation && annotation !== "__analyzing__"
+              ? annotation
+              : statusLabels[session.status] ?? session.status}
+          </span>
+          {companionCount > 0 && (
+            <span className="bg-white/40 backdrop-blur-md px-3 py-1 rounded-full text-xs font-medium text-slate-600 border border-white/40">
+              +{companionCount}
+            </span>
+          )}
+        </div>
       </motion.button>
 
       {/* Hover preview tooltip */}
@@ -171,7 +143,7 @@ export function SessionCard({
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.8, 0.25, 1] }}
             className="absolute left-0 right-0 top-full mt-2 z-30 rounded-lg bg-slate-900/90 backdrop-blur-md border border-slate-700/50 shadow-xl p-3 pointer-events-none"
           >
             <div className="space-y-0.5 font-mono text-[11px] text-slate-300 leading-relaxed">

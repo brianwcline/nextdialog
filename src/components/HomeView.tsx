@@ -8,26 +8,26 @@ interface HomeViewProps {
   onSelectSession: (id: string) => void;
   onSessionContextMenu: (id: string, e: React.MouseEvent) => void;
   onOpenSettings: () => void;
+  onOpenFeedback: () => void;
   sessionTypeMap?: Record<string, SessionType>;
   companionCounts?: Record<string, number>;
+  activeSessionId?: string | null;
 }
 
 function EmptyState({ onNewSession }: { onNewSession: () => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-      <motion.img
+      <img
         src="/icons/nextdialog.png"
         alt="NextDialog"
         className="w-14 h-14 opacity-20"
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
       />
       <p className="text-slate-500 text-center max-w-xs">
-        No sessions yet. Create one to start a Claude Code conversation.
+        No sessions yet. Create one to get started.
       </p>
       <button
         onClick={onNewSession}
-        className="mt-2 px-5 py-2.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20 text-slate-700 text-sm font-medium hover:bg-white/30 transition-colors shadow-md"
+        className="mt-2 px-5 py-2.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20 text-slate-700 text-sm font-medium hover:bg-white/40 transition-colors shadow-md"
       >
         New Session
       </button>
@@ -41,9 +41,12 @@ export function HomeView({
   onSelectSession,
   onSessionContextMenu,
   onOpenSettings,
+  onOpenFeedback,
   sessionTypeMap = {},
   companionCounts = {},
+  activeSessionId = null,
 }: HomeViewProps) {
+  const isTerminalOpen = activeSessionId !== null;
   const renderCards = (cards: Session[], startIndex: number) =>
     cards.map((session, i) => (
       <SessionCard
@@ -60,9 +63,11 @@ export function HomeView({
   return (
     <div className="flex flex-col h-full">
       {/* Top bar — draggable region for window movement */}
-      <header
+      <motion.header
         data-tauri-drag-region
         className="flex items-center justify-between pl-20 pr-6 pt-5 pb-3"
+        animate={{ opacity: isTerminalOpen ? 0 : 1 }}
+        transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
       >
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -72,36 +77,50 @@ export function HomeView({
             </h1>
           </div>
           {sessions.length > 0 && (
-            <span className="text-xs bg-white/30 backdrop-blur-sm rounded-full px-2.5 py-0.5 text-slate-600 font-medium select-none">
+            <span className="text-xs bg-white/40 backdrop-blur-sm border border-white/40 shadow-sm rounded-full px-2.5 py-0.5 text-slate-600 font-medium select-none">
               {sessions.length}
             </span>
           )}
         </div>
-        <button
-          onClick={onOpenSettings}
-          className="p-2 rounded-lg text-slate-500 hover:bg-white/30 transition-colors text-sm"
-          title="Settings"
-        >
-          ⚙
-        </button>
-      </header>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onOpenFeedback}
+            className="px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-white/40 hover:text-slate-700 transition-colors"
+            title="Send Feedback"
+          >
+            Feedback
+          </button>
+          <button
+            onClick={onOpenSettings}
+            className="px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-white/40 hover:text-slate-700 transition-colors"
+            title="Settings"
+          >
+            Settings
+          </button>
+        </div>
+      </motion.header>
 
       {/* Content */}
       {sessions.length === 0 ? (
         <EmptyState onNewSession={onNewSession} />
       ) : (
-        <div className="flex-1 overflow-y-auto flex items-center justify-center px-8">
-          <div className="flex flex-wrap gap-4 justify-center content-center max-w-3xl">
+        <div className="flex-1 overflow-y-auto flex items-center justify-center p-8">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: isTerminalOpen ? 0 : 1, y: isTerminalOpen ? -20 : 0 }}
+            transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl w-full justify-items-center"
+          >
             {renderCards(sessions, 0)}
-          </div>
+          </motion.div>
         </div>
       )}
 
       {/* Floating action button */}
-      {sessions.length > 0 && (
+      {sessions.length > 0 && !isTerminalOpen && (
         <button
           onClick={onNewSession}
-          className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-white/20 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/30 transition-colors flex items-center justify-center text-slate-700 text-xl font-light"
+          className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-white/40 backdrop-blur-xl border border-white/50 shadow-lg hover:bg-white/55 hover:scale-105 transition-all duration-300 flex items-center justify-center text-slate-700 text-xl font-light"
           title="New Session"
         >
           +

@@ -18,7 +18,7 @@ export function SessionDock({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30">
-      <div className="flex items-center justify-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border-t border-white/20">
+      <div className="flex items-center justify-center gap-2 px-6 py-3 bg-white/30 backdrop-blur-xl border-t border-white/40">
         <span className="text-xs text-slate-500 mr-2">Parked</span>
         <AnimatePresence>
           {sessions.map((session) => {
@@ -29,8 +29,9 @@ export function SessionDock({
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
                 onClick={() => onUnpark(session.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-sm border border-white/25 hover:bg-white/30 transition-colors text-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white/55 shadow-sm transition-all duration-300 text-sm"
                 title={`Unpark ${session.name}`}
               >
                 {st && (

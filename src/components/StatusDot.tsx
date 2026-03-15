@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import type { SessionStatus } from "../lib/types";
 
 const statusColors: Record<SessionStatus, string> = {
@@ -11,30 +10,29 @@ const statusColors: Record<SessionStatus, string> = {
   error: "#EF4444",
 };
 
-const pulseStatuses = new Set<SessionStatus>(["starting", "working", "planning"]);
+const statusGlows: Record<SessionStatus, string> = {
+  stopped: "none",
+  starting: "none",
+  idle: "none",
+  working: "none",
+  planning: "none",
+  waiting: "0 0 12px rgba(245, 158, 11, 0.5)",
+  error: "0 0 12px rgba(239, 68, 68, 0.5)",
+};
 
 interface StatusDotProps {
   status: SessionStatus;
   size?: number;
 }
 
-export function StatusDot({ status, size = 10 }: StatusDotProps) {
+export function StatusDot({ status, size = 16 }: StatusDotProps) {
   const color = statusColors[status];
-  const shouldPulse = pulseStatuses.has(status);
 
   return (
-    <span className="relative inline-flex" style={{ width: size, height: size }}>
-      {shouldPulse && (
-        <motion.span
-          className="absolute inset-0 rounded-full"
-          style={{ backgroundColor: color }}
-          animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
-        />
-      )}
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
       <span
-        className="relative inline-flex rounded-full w-full h-full"
-        style={{ backgroundColor: color }}
+        className="inline-flex rounded-full w-full h-full"
+        style={{ backgroundColor: color, boxShadow: statusGlows[status] }}
       />
     </span>
   );

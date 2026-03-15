@@ -109,9 +109,9 @@ export function useGradient({ canvasRef, sessionStatuses = [] }: GradientConfig)
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
         gradient.addColorStop(
           0,
-          `hsla(${hue}, 70%, 82%, 0.3)`,
+          `hsla(${hue}, 75%, 72%, 0.45)`,
         );
-        gradient.addColorStop(1, `hsla(${hue}, 70%, 82%, 0)`);
+        gradient.addColorStop(1, `hsla(${hue}, 75%, 72%, 0)`);
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, w, h);

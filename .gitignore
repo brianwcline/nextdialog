@@ -22,3 +22,6 @@ Thumbs.db
 # Environment
 .env
 .env.*
+
+# Cargo secrets (config.toml.example is checked in)
+src-tauri/.cargo/config.toml
