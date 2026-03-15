@@ -65,10 +65,11 @@ export function HomeView({
       {/* Top bar — draggable region for window movement */}
       <motion.header
         data-tauri-drag-region
-        className="flex items-center justify-between pl-20 pr-6 pt-5 pb-3"
+        className="relative flex items-center justify-center px-6 pt-5 pb-3"
         animate={{ opacity: isTerminalOpen ? 0 : 1 }}
         transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
       >
+        {/* Center — logo, title, count */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <img src="/icons/nextdialog.png" alt="NextDialog" className="w-6 h-6 pointer-events-none" />
@@ -82,7 +83,9 @@ export function HomeView({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+
+        {/* Right — actions (absolute so they don't shift the center) */}
+        <div className="absolute right-6 flex items-center gap-1">
           <button
             onClick={onOpenFeedback}
             className="px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-white/40 hover:text-slate-700 transition-colors"

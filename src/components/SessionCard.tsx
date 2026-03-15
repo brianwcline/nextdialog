@@ -101,38 +101,38 @@ export function SessionCard({
         onClick={onClick}
         onContextMenu={onContextMenu}
         onMouseEnter={handleMouseEnter}
-        className="w-[280px] h-[280px] rounded-[2rem] glass-card cursor-pointer text-left px-6 py-8 flex flex-col justify-between overflow-hidden group"
+        className="relative w-[280px] h-[280px] rounded-[2rem] glass-card cursor-pointer text-left px-7 py-7 flex flex-col overflow-hidden group"
       >
-        <div className="min-w-0">
-          <div className="flex items-center gap-4 mb-3 min-w-0">
-            <StatusDot status={session.status} />
-            <h3 className="text-2xl font-medium tracking-tight text-slate-800 group-hover:text-slate-900 transition-colors line-clamp-2 leading-tight">
-              {session.name}
-            </h3>
-          </div>
-          <p className="text-sm text-slate-400 font-mono pl-8 truncate group-hover:text-slate-500 transition-colors">
-            {session.working_directory.replace(/^\/Users\/[^/]+/, "~")}
-          </p>
-        </div>
-
-        {/* Token burn bar */}
-        {contextUsage !== null && (
-          <div className="pl-8">
-            <TokenBurnBar usage={contextUsage} />
-          </div>
-        )}
-
-        <div className="flex items-center justify-between pl-8 mt-auto pt-8">
-          <span className="text-sm font-medium text-slate-400 group-hover:text-slate-600 transition-colors">
+        {/* Status dot — top left */}
+        <div className="flex items-center gap-2 mb-4">
+          <StatusDot status={session.status} size={10} />
+          <span className="text-xs font-medium text-slate-400 group-hover:text-slate-500 transition-colors">
             {annotation && annotation !== "__analyzing__"
               ? annotation
               : statusLabels[session.status] ?? session.status}
           </span>
-          {companionCount > 0 && (
-            <span className="bg-white/40 backdrop-blur-md px-3 py-1 rounded-full text-xs font-medium text-slate-600 border border-white/40">
-              +{companionCount}
-            </span>
-          )}
+        </div>
+
+        {/* Companion count — top right badge */}
+        {companionCount > 0 && (
+          <span className="absolute top-7 right-7 bg-white/40 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[11px] font-medium text-slate-500 border border-white/30">
+            +{companionCount}
+          </span>
+        )}
+
+        {/* Title */}
+        <h3 className="text-2xl font-medium tracking-tight text-slate-800 group-hover:text-slate-900 transition-colors line-clamp-2 leading-tight mb-2">
+          {session.name}
+        </h3>
+
+        {/* Path */}
+        <p className="text-sm text-slate-400 font-mono truncate group-hover:text-slate-500 transition-colors">
+          {session.working_directory.replace(/^\/Users\/[^/]+/, "~")}
+        </p>
+
+        {/* Token burn bar — pushed to bottom */}
+        <div className="mt-auto pt-4">
+          {contextUsage !== null && <TokenBurnBar usage={contextUsage} />}
         </div>
       </motion.button>
 
