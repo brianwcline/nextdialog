@@ -73,6 +73,7 @@ pub fn create_companion(
 
 // ── PTY lifecycle ──
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn spawn_pty_session(
     pool: State<'_, PtyPool>,

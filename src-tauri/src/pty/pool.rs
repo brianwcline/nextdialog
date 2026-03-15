@@ -18,6 +18,7 @@ struct PtySession {
     child: Box<dyn Child + Send + Sync>,
 }
 
+#[allow(clippy::type_complexity)]
 pub struct PtyPool {
     sessions: Mutex<HashMap<String, PtySession>>,
     detectors: Arc<Mutex<HashMap<String, Arc<Mutex<StatusDetector>>>>>,
@@ -288,6 +289,7 @@ impl PtyPool {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         &self,
         id: &str,
@@ -411,6 +413,7 @@ impl PtyPool {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn restart(
         &self,
         id: &str,
