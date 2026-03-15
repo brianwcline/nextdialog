@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef, Component, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { Session } from "./lib/types";
 import { SessionProvider } from "./context/SessionContext";
 import { ShiftingGradient } from "./components/ShiftingGradient";
 import { HomeView } from "./components/HomeView";
@@ -62,13 +63,22 @@ function AppContent() {
   const { sessionTypes, updateType, createType, deleteType } = useSessionTypes();
 
   const activeSessions = useMemo(
-    () => sessions.filter((s) => !s.parked),
+    () => sessions.filter((s) => !s.parked && !s.parent_id),
     [sessions],
   );
   const parkedSessions = useMemo(
     () => sessions.filter((s) => s.parked),
     [sessions],
   );
+  const companionMap = useMemo(() => {
+    const map: Record<string, typeof sessions> = {};
+    for (const s of sessions) {
+      if (s.parent_id) {
+        (map[s.parent_id] ??= []).push(s);
+      }
+    }
+    return map;
+  }, [sessions]);
 
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>(() =>
     getRecentSessions(),
@@ -122,9 +132,16 @@ function AppContent() {
   const handleEndSession = useCallback(
     async (id: string) => {
       try {
+        // Cascade kill companions
+        const companions = companionMap[id] ?? [];
+        for (const c of companions) {
+          await invoke("kill_pty_session", { id: c.id }).catch(() => {});
+          spawningRef.current.delete(c.id);
+        }
+        setSpawnedIds((prev) => prev.filter((s) => s !== id && !companions.some((c) => c.id === s)));
+
         await invoke("kill_pty_session", { id });
         spawningRef.current.delete(id);
-        setSpawnedIds((prev) => prev.filter((s) => s !== id));
         if (activeSessionId === id) {
           setActiveSessionId(null);
         }
@@ -132,7 +149,7 @@ function AppContent() {
         console.error("Failed to kill session:", err);
       }
     },
-    [activeSessionId],
+    [activeSessionId, companionMap],
   );
 
   const handleRestartSession = useCallback(async (id: string) => {
@@ -159,9 +176,17 @@ function AppContent() {
           setRecentSessions(getRecentSessions());
         }
 
+        // Cascade kill + remove companions
+        const companions = companionMap[id] ?? [];
+        for (const c of companions) {
+          await invoke("kill_pty_session", { id: c.id }).catch(() => {});
+          spawningRef.current.delete(c.id);
+          await removeSession(c.id).catch(() => {});
+        }
+        setSpawnedIds((prev) => prev.filter((s) => s !== id && !companions.some((c) => c.id === s)));
+
         await invoke("kill_pty_session", { id }).catch(() => {});
         spawningRef.current.delete(id);
-        setSpawnedIds((prev) => prev.filter((s) => s !== id));
         await removeSession(id);
         if (activeSessionId === id) {
           setActiveSessionId(null);
@@ -170,7 +195,7 @@ function AppContent() {
         console.error("Failed to remove session:", err);
       }
     },
-    [activeSessionId, removeSession, sessions],
+    [activeSessionId, removeSession, sessions, companionMap],
   );
 
   const handleParkSession = useCallback(
@@ -200,6 +225,46 @@ function AppContent() {
     },
     [loadSessions, handleSelectSession],
   );
+
+  const handleAddCompanion = useCallback(async (parentId: string) => {
+    try {
+      const companion = await invoke<Session>("create_companion", { parentId });
+      await loadSessions();
+      await invoke("spawn_pty_session", { id: companion.id, rows: null, cols: null });
+      setSpawnedIds((prev) => [...prev, companion.id]);
+    } catch (err) {
+      console.error("Failed to create companion:", err);
+    }
+  }, [loadSessions]);
+
+  const handleRemoveCompanion = useCallback(async (id: string) => {
+    try {
+      await invoke("kill_pty_session", { id }).catch(() => {});
+      spawningRef.current.delete(id);
+      setSpawnedIds((prev) => prev.filter((s) => s !== id));
+      await removeSession(id);
+    } catch (err) {
+      console.error("Failed to remove companion:", err);
+    }
+  }, [removeSession]);
+
+  // Auto-spawn companion PTYs when a session is opened
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const companions = sessions.filter((s) => s.parent_id === activeSessionId);
+    for (const c of companions) {
+      if (!spawningRef.current.has(c.id)) {
+        spawningRef.current.add(c.id);
+        invoke("spawn_pty_session", { id: c.id, rows: null, cols: null })
+          .then(() => {
+            setSpawnedIds((prev) => (prev.includes(c.id) ? prev : [...prev, c.id]));
+          })
+          .catch(() => {
+            spawningRef.current.delete(c.id);
+          });
+      }
+    }
+  }, [activeSessionId, sessions]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -259,6 +324,14 @@ function AppContent() {
       ]
     : [];
 
+  const companionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const [parentId, companions] of Object.entries(companionMap)) {
+      counts[parentId] = companions.length;
+    }
+    return counts;
+  }, [companionMap]);
+
   const typeMap = useMemo(() => {
     const map: Record<string, typeof sessionTypes[0]> = {};
     for (const t of sessionTypes) {
@@ -277,6 +350,7 @@ function AppContent() {
         onSessionContextMenu={handleContextMenu}
         onOpenSettings={() => setShowSettings(true)}
         sessionTypeMap={typeMap}
+        companionCounts={companionCounts}
       />
       <NewSessionModal
         isOpen={showNewSession}
@@ -303,16 +377,19 @@ function AppContent() {
       />
       {spawnedIds.map((id) => {
         const session = sessions.find((s) => s.id === id);
-        if (!session) return null;
+        if (!session || session.parent_id) return null;
         return (
           <TerminalOverlay
             key={id}
             session={session}
+            companions={companionMap[id] ?? []}
             isOpen={activeSessionId === id}
             onClose={() => setActiveSessionId(null)}
             onEnd={handleEndSession}
             onRestart={handleRestartSession}
             onRemove={handleRemoveSession}
+            onAddCompanion={handleAddCompanion}
+            onRemoveCompanion={handleRemoveCompanion}
           />
         );
       })}

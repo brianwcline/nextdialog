@@ -34,4 +34,5 @@ export const terminalOptions = {
   cursorStyle: "bar" as const,
   allowTransparency: false,
   scrollback: 10000,
+  allowProposedApi: true,
 };

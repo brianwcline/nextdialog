@@ -18,6 +18,7 @@ export interface Session {
   status: SessionStatus;
   session_type: string;
   parked: boolean;
+  parent_id?: string;
 }
 
 export interface SessionType {

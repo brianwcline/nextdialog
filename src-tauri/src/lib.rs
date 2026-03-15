@@ -3,6 +3,7 @@ mod commands;
 mod pty;
 mod session;
 mod settings;
+mod intelligence;
 mod status;
 
 use tauri::Manager;
@@ -11,6 +12,7 @@ use pty::pool::PtyPool;
 use session::file_tracker::FileTracker;
 use session::manager::SessionManager;
 use session::types::SessionTypeManager;
+use intelligence::IntelligenceManager;
 use settings::SettingsManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,15 +29,18 @@ pub fn run() {
         .manage(SettingsManager::new())
         .manage(SessionTypeManager::new())
         .manage(file_tracker)
+        .manage(IntelligenceManager::new())
         .setup(|app| {
             let tracker = app.state::<FileTracker>();
             tracker.start_polling(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_sessions,
             commands::create_session,
             commands::remove_session,
+            commands::create_companion,
             commands::spawn_pty_session,
             commands::write_to_pty,
             commands::resize_pty,
@@ -53,6 +58,8 @@ pub fn run() {
             commands::create_session_type,
             commands::update_session_type,
             commands::delete_session_type,
+            commands::get_session_annotation,
+            commands::get_resolved_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

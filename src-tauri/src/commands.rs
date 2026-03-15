@@ -6,6 +6,7 @@ use crate::session::config::{CreateSessionRequest, SessionConfig};
 use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
 use crate::session::types::{SessionType, SessionTypeManager};
+use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
 
 // ── Session CRUD ──
@@ -30,12 +31,43 @@ pub fn create_session(
         skip_permissions,
         initial_prompt,
         session_type: session_type.unwrap_or_else(|| "claude-code".to_string()),
+        parent_id: None,
     })
 }
 
 #[tauri::command]
 pub fn remove_session(manager: State<'_, SessionManager>, id: String) -> Result<(), String> {
     manager.remove(&id)
+}
+
+// ── Companion terminals ──
+
+#[tauri::command]
+pub fn create_companion(
+    manager: State<'_, SessionManager>,
+    parent_id: String,
+    name: Option<String>,
+) -> Result<SessionConfig, String> {
+    let parent = manager
+        .get(&parent_id)
+        .ok_or_else(|| format!("Parent session not found: {parent_id}"))?;
+
+    let companion_name = match name {
+        Some(n) => n,
+        None => {
+            let count = manager.list_companions(&parent_id).len();
+            format!("Terminal {}", count + 1)
+        }
+    };
+
+    manager.create(CreateSessionRequest {
+        name: companion_name,
+        working_directory: parent.working_directory,
+        skip_permissions: false,
+        initial_prompt: None,
+        session_type: "terminal".to_string(),
+        parent_id: Some(parent_id),
+    })
 }
 
 // ── PTY lifecycle ──
@@ -223,4 +255,21 @@ pub fn delete_session_type(
     id: String,
 ) -> Result<(), String> {
     manager.delete(&id)
+}
+
+// ── Diagnostics ──
+
+#[tauri::command]
+pub fn get_resolved_path() -> String {
+    std::env::var("PATH").unwrap_or_default()
+}
+
+// ── Intelligence ──
+
+#[tauri::command]
+pub fn get_session_annotation(
+    intelligence: State<'_, IntelligenceManager>,
+    id: String,
+) -> Option<String> {
+    intelligence.get_annotation(&id)
 }

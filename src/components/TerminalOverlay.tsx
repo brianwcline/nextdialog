@@ -1,48 +1,50 @@
-import { useRef, useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { useTerminal } from "../hooks/useTerminal";
+import { TerminalPane } from "./TerminalPane";
 import { StatusDot } from "./StatusDot";
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalOverlayProps {
   session: Session;
+  companions: Session[];
   isOpen: boolean;
   onClose: () => void;
   onEnd: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
+  onAddCompanion: (parentId: string) => void;
+  onRemoveCompanion: (id: string) => void;
 }
 
 export function TerminalOverlay({
   session,
+  companions,
   isOpen,
   onClose,
   onEnd,
   onRestart,
   onRemove,
+  onAddCompanion,
+  onRemoveCompanion,
 }: TerminalOverlayProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [activeTabId, setActiveTabId] = useState(session.id);
   const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const { focus } = useTerminal({
-    sessionId: session.id,
-    containerRef,
-    visible: isOpen,
-  });
 
-  const isStopped = session.status === "stopped";
+  const allTabs = [session, ...companions];
+  const activeSession = allTabs.find((t) => t.id === activeTabId) ?? session;
+  const isStopped = activeSession.status === "stopped";
 
+  // Reset to primary tab if active tab was removed
   useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(focus, 300);
-      return () => clearTimeout(timer);
+    if (!allTabs.some((t) => t.id === activeTabId)) {
+      setActiveTabId(session.id);
     }
-  }, [isOpen, focus]);
+  }, [allTabs, activeTabId, session.id]);
 
-  // ESC to close
+  // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
@@ -52,48 +54,77 @@ export function TerminalOverlay({
         } else {
           onClose();
         }
+        return;
+      }
+
+      if (e.metaKey && e.key === "t") {
+        e.preventDefault();
+        onAddCompanion(session.id);
+        return;
+      }
+
+      if (e.metaKey && e.key === "w") {
+        e.preventDefault();
+        if (activeTabId !== session.id) {
+          onRemoveCompanion(activeTabId);
+        }
+        return;
+      }
+
+      if (e.metaKey && e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        const idx = parseInt(e.key) - 1;
+        const tabs = [session, ...companions];
+        if (idx < tabs.length) {
+          setActiveTabId(tabs[idx].id);
+        }
+        return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose, showMenu]);
+  }, [isOpen, onClose, showMenu, session, companions, activeTabId, onAddCompanion, onRemoveCompanion]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!showMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [showMenu]);
-
-  // Drag-drop file handling
+  // Drag-drop file handling — writes to active tab
   useEffect(() => {
     if (!isOpen) return;
-
     const webview = getCurrentWebviewWindow();
     const unlistenPromise = webview.onDragDropEvent((event) => {
       if (event.payload.type === "drop") {
         const paths = event.payload.paths;
         if (paths.length > 0) {
-          const pathStr = paths.join(" ");
           invoke("write_to_pty", {
-            id: session.id,
-            data: pathStr,
+            id: activeTabId,
+            data: paths.join(" "),
           }).catch(console.error);
         }
       }
     });
-
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [isOpen, session.id]);
+  }, [isOpen, activeTabId]);
 
-  // Always render, but animate visibility — preserves xterm DOM and scrollback
+  // Auto-switch to newly added companion
+  const prevCompanionCountRef = useRef(companions.length);
+  useEffect(() => {
+    if (companions.length > prevCompanionCountRef.current) {
+      const newest = companions[companions.length - 1];
+      if (newest) setActiveTabId(newest.id);
+    }
+    prevCompanionCountRef.current = companions.length;
+  }, [companions.length]);
+
+  const handleCloseCompanionTab = useCallback(
+    (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      onRemoveCompanion(id);
+    },
+    [onRemoveCompanion],
+  );
+
+  const hasCompanions = companions.length > 0;
+
   return (
     <motion.div
       className="fixed inset-0 z-50 flex items-center justify-center p-8"
@@ -103,17 +134,13 @@ export function TerminalOverlay({
         pointerEvents: isOpen ? "auto" : "none",
       }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      style={{
-        visibility: isOpen ? "visible" : "hidden",
-      }}
+      style={{ visibility: isOpen ? "visible" : "hidden" }}
     >
       {/* Backdrop */}
       <motion.div
         className="absolute inset-0 bg-black/10"
         initial={false}
-        animate={{
-          backdropFilter: isOpen ? "blur(8px)" : "blur(0px)",
-        }}
+        animate={{ backdropFilter: isOpen ? "blur(8px)" : "blur(0px)" }}
         transition={{ duration: 0.3, ease: "easeOut" }}
         onClick={onClose}
       />
@@ -122,28 +149,38 @@ export function TerminalOverlay({
       <motion.div
         className="relative w-full h-full max-w-5xl max-h-[85vh] rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col bg-[#1E1E2E]"
         initial={false}
-        animate={{
-          scale: isOpen ? 1 : 0.97,
-          y: isOpen ? 0 : 10,
-        }}
+        animate={{ scale: isOpen ? 1 : 0.97, y: isOpen ? 0 : 10 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#181825] border-b border-slate-700/50">
           <div className="flex items-center gap-3">
-            <StatusDot status={session.status} size={8} />
+            <StatusDot status={activeSession.status} size={8} />
             <span className="text-sm font-medium text-slate-200">
-              {session.name}
+              {activeSession.name}
             </span>
             <span className="text-xs text-slate-400 font-mono">
-              {session.working_directory.replace(/^\/Users\/[^/]+/, "~")}
+              {activeSession.working_directory.replace(/^\/Users\/[^/]+/, "~")}
             </span>
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* + Terminal link (when no companions yet) */}
+            {!hasCompanions && (
+              <button
+                onClick={() => onAddCompanion(session.id)}
+                className="px-2.5 py-1 rounded-md text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
+                title="Add companion terminal (⌘T)"
+              >
+                + Terminal
+              </button>
+            )}
+
+            <div className="w-px h-4 bg-slate-700/50 mx-1" />
+
             {/* Restart */}
             <button
-              onClick={() => onRestart(session.id)}
+              onClick={() => onRestart(activeTabId)}
               title="Restart session"
               className="px-2.5 py-1 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors"
             >
@@ -153,7 +190,7 @@ export function TerminalOverlay({
             {/* End / Start toggle */}
             {isStopped ? (
               <button
-                onClick={() => onRestart(session.id)}
+                onClick={() => onRestart(activeTabId)}
                 title="Start session"
                 className="px-2.5 py-1 rounded-md text-xs text-green-400 hover:text-green-300 hover:bg-green-900/30 transition-colors"
               >
@@ -161,7 +198,7 @@ export function TerminalOverlay({
               </button>
             ) : (
               <button
-                onClick={() => onEnd(session.id)}
+                onClick={() => onEnd(activeTabId)}
                 title="End session"
                 className="px-2.5 py-1 rounded-md text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
               >
@@ -170,7 +207,7 @@ export function TerminalOverlay({
             )}
 
             {/* More menu */}
-            <div className="relative" ref={menuRef}>
+            <div className="relative">
               <button
                 onClick={() => setShowMenu((v) => !v)}
                 className="px-2 py-1 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors text-sm"
@@ -183,7 +220,7 @@ export function TerminalOverlay({
                   <button
                     onClick={() => {
                       setShowMenu(false);
-                      onRestart(session.id);
+                      onRestart(activeTabId);
                     }}
                     className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors"
                   >
@@ -192,7 +229,7 @@ export function TerminalOverlay({
                   <button
                     onClick={() => {
                       setShowMenu(false);
-                      onEnd(session.id);
+                      onEnd(activeTabId);
                     }}
                     className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors"
                   >
@@ -202,7 +239,7 @@ export function TerminalOverlay({
                   <button
                     onClick={() => {
                       setShowMenu(false);
-                      onRemove(session.id);
+                      onRemove(activeTabId);
                     }}
                     className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/30 transition-colors"
                   >
@@ -212,7 +249,7 @@ export function TerminalOverlay({
               )}
             </div>
 
-            {/* Close overlay (hide, don't kill) */}
+            {/* Close overlay */}
             <button
               onClick={onClose}
               title="Close overlay (session keeps running)"
@@ -223,8 +260,57 @@ export function TerminalOverlay({
           </div>
         </div>
 
-        {/* Terminal container */}
-        <div ref={containerRef} className="flex-1 p-1" />
+        {/* Tab bar — shown only when companions exist */}
+        {hasCompanions && (
+          <div className="flex items-center bg-[#181825] border-b border-slate-700/50 px-2">
+            {allTabs.map((tab, idx) => {
+              const isActive = tab.id === activeTabId;
+              const isCompanion = tab.id !== session.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTabId(tab.id)}
+                  className={`group relative flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors ${
+                    isActive
+                      ? "text-slate-200 border-b-2 border-indigo-400"
+                      : "text-slate-500 hover:text-slate-300 border-b-2 border-transparent"
+                  }`}
+                  title={`⌘${idx + 1}`}
+                >
+                  <StatusDot status={tab.status} size={6} />
+                  <span>{tab.name}</span>
+                  {isCompanion && (
+                    <span
+                      onClick={(e) => handleCloseCompanionTab(e, tab.id)}
+                      className="ml-1 text-slate-600 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {/* Add tab button */}
+            <button
+              onClick={() => onAddCompanion(session.id)}
+              className="px-2 py-1.5 text-xs text-slate-600 hover:text-slate-300 transition-colors"
+              title="Add companion terminal (⌘T)"
+            >
+              +
+            </button>
+          </div>
+        )}
+
+        {/* Terminal panes — all mounted, only active visible */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {allTabs.map((tab) => (
+            <TerminalPane
+              key={tab.id}
+              sessionId={tab.id}
+              visible={tab.id === activeTabId && isOpen}
+            />
+          ))}
+        </div>
       </motion.div>
     </motion.div>
   );
