@@ -4,8 +4,14 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const API_URL: &str = env!("ND_API_URL");
-const API_KEY: &str = env!("ND_API_KEY");
+const API_URL: &str = match option_env!("ND_API_URL") {
+    Some(v) => v,
+    None => "",
+};
+const API_KEY: &str = match option_env!("ND_API_KEY") {
+    Some(v) => v,
+    None => "",
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryEvent {
@@ -73,6 +79,10 @@ impl TelemetryClient {
     }
 
     pub fn flush(&self) -> Result<(), String> {
+        if API_URL.is_empty() || API_KEY.is_empty() {
+            return Ok(());
+        }
+
         let events: Vec<TelemetryEvent> = {
             let mut buf = self.buffer.lock().unwrap();
             if buf.is_empty() {
@@ -109,6 +119,10 @@ impl TelemetryClient {
         category: Option<String>,
         app_state: Option<Value>,
     ) -> Result<(), String> {
+        if API_URL.is_empty() || API_KEY.is_empty() {
+            return Ok(());
+        }
+
         let payload = FeedbackPayload {
             machine_id: self.machine_id.clone(),
             app_version: env!("CARGO_PKG_VERSION").to_string(),

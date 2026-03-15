@@ -1,0 +1,64 @@
+# NextDialog
+
+**A calm interface for AI coding agents.**
+
+[![CI](https://github.com/brianwcline/nextdialog/actions/workflows/test.yml/badge.svg)](https://github.com/brianwcline/nextdialog/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## What it does
+
+- **Multi-session terminal management** — Run multiple AI coding agents side by side. Claude Code, Codex, Aider, Gemini CLI, or any terminal-based tool.
+- **Companion terminals** — Attach secondary terminals to any session for running tests, checking logs, or monitoring alongside your agent.
+- **Session status detection** — Glanceable status dots show which sessions are working, which need your attention, and which are idle.
+- **Context usage tracking** — See how much context window each agent session has consumed.
+- **Return to calm** — One calm overview screen. Click in when needed. Press Escape to return. The gradient breathes. Nothing demands attention until something deserves it.
+
+## Quick start
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 20+
+- [Rust](https://www.rust-lang.org/tools/install) 1.75+
+- Platform dependencies: see the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/)
+
+### Build & run
+
+```bash
+git clone https://github.com/brianwcline/nextdialog.git
+cd nextdialog
+npm install
+npm run tauri dev
+```
+
+> **Note:** The first build compiles Rust dependencies and will take several minutes.
+
+## Architecture
+
+| Layer | Stack |
+|-------|-------|
+| Frontend | React 19, Tailwind CSS 4, xterm.js, Framer Motion |
+| Backend | Tauri v2 (Rust), portable-pty for terminal multiplexing |
+| Distribution | Tauri bundler — `.app` (macOS), `.deb`/`.AppImage` (Linux), `.exe` (Windows) |
+
+## Telemetry
+
+Community builds have **telemetry disabled by default**. No API credentials are baked into the binary unless explicitly provided at compile time.
+
+Official release builds collect anonymous usage events (session lifecycle, feature usage) and opt-in feedback. No personally identifiable information is collected. See `src-tauri/src/telemetry.rs` for the full implementation.
+
+## Philosophy
+
+NextDialog is designed for how developers *feel*, not how computers perform. Every tool in the multi-agent space competes on features — more panels, more config, more density. NextDialog competes on calm.
+
+Read more: [PHILOSOPHY.md](PHILOSOPHY.md) | [BRAND.md](BRAND.md)
+
+## Known limitations
+
+- **No code signing** — macOS and Windows will show "unidentified developer" warnings. Code signing is planned for a future release.
+- **No auto-updater** — Manual downloads for now.
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2025 Brian Cline

@@ -25,3 +25,14 @@ Thumbs.db
 
 # Cargo secrets (config.toml.example is checked in)
 src-tauri/.cargo/config.toml
+
+# Claude Code local config
+.claude/
+
+# Internal docs / separate projects
+configs/
+REFERENCE/
+design/
+website/
+nextdialog-api/
+WEBSITE-SPEC.md
