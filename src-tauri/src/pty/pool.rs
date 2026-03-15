@@ -4,9 +4,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
+use crate::intelligence::IntelligenceManager;
 use crate::pty::activity::ActivityTracker;
+use crate::settings::SettingsManager;
 use crate::session::types::SessionType;
 use crate::status::detector::{SessionStatus, StatusDetector};
 
@@ -46,6 +48,7 @@ impl PtyPool {
         *handle_guard = Some(app_handle.clone());
 
         let detectors = self.detectors.clone();
+        let preview_map = self.preview_lines.clone();
         let handle = app_handle.clone();
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_millis(500));
@@ -53,6 +56,19 @@ impl PtyPool {
             for (id, detector) in map.iter() {
                 if let Some(SessionStatus::Idle) = detector.lock().unwrap().check_silence(2.0) {
                     let _ = handle.emit(&format!("session-status-{id}"), "idle");
+
+                    // Request intelligence annotation
+                    if let Some(preview_arc) = preview_map.lock().unwrap().get(id) {
+                        let lines: Vec<String> = {
+                            let buf = preview_arc.lock().unwrap();
+                            buf.iter().rev().take(5).rev().cloned().collect()
+                        };
+                        if !lines.is_empty() {
+                            let intelligence = handle.state::<IntelligenceManager>();
+                            let settings_mgr = handle.state::<SettingsManager>();
+                            intelligence.request_annotation(id, lines, settings_mgr.inner(), &handle);
+                        }
+                    }
                 }
             }
         });
@@ -153,6 +169,12 @@ impl PtyPool {
                                     status_str,
                                 );
 
+                                // Clear intelligence annotation when working
+                                if new_status == SessionStatus::Working {
+                                    let intelligence = handle.state::<IntelligenceManager>();
+                                    intelligence.clear_annotation(&session_id);
+                                }
+
                                 // Emit plan summary when entering planning mode
                                 if new_status == SessionStatus::Planning {
                                     if let Some(ref summary) = det.extras().plan_summary {
@@ -192,6 +214,14 @@ impl PtyPool {
                                     .filter(|c| c.is_alphanumeric())
                                     .count();
                                 if alpha_count < 3 {
+                                    continue;
+                                }
+                                // Skip Claude Code status bar lines
+                                if trimmed.starts_with("connected |")
+                                    || (trimmed.starts_with("agent ")
+                                        && trimmed.contains("| session ")
+                                        && trimmed.contains("| tokens "))
+                                {
                                     continue;
                                 }
                                 let capped = if trimmed.len() > 200 {
@@ -295,6 +325,7 @@ impl PtyPool {
         }
 
         cmd.cwd(cwd);
+
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("LANG", "en_US.UTF-8");
@@ -413,6 +444,7 @@ impl PtyPool {
         }
 
         cmd.cwd(cwd);
+
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("LANG", "en_US.UTF-8");

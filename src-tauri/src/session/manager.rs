@@ -67,6 +67,7 @@ impl SessionManager {
             status: "stopped".to_string(),
             session_type: req.session_type,
             parked: false,
+            parent_id: req.parent_id,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -79,12 +80,23 @@ impl SessionManager {
     pub fn remove(&self, id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().unwrap();
         let before = sessions.len();
-        sessions.retain(|s| s.id != id);
+        // Cascade: also remove companions whose parent_id matches
+        sessions.retain(|s| s.id != id && s.parent_id.as_deref() != Some(id));
         if sessions.len() == before {
             return Err(format!("Session not found: {id}"));
         }
         self.persist(&sessions);
         Ok(())
+    }
+
+    pub fn list_companions(&self, parent_id: &str) -> Vec<SessionConfig> {
+        self.sessions
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|s| s.parent_id.as_deref() == Some(parent_id))
+            .cloned()
+            .collect()
     }
 
     pub fn update_status(&self, id: &str, status: &str) {

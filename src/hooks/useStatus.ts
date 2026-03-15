@@ -22,6 +22,8 @@ export function useStatus(sessionIds: string[]) {
     sounds_enabled: false,
     sound_volume: 0.5,
   });
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
 
   // Check notification permission on mount
   useEffect(() => {
@@ -49,19 +51,22 @@ export function useStatus(sessionIds: string[]) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const unlisteners: (() => void)[] = [];
 
     for (const id of sessionIds) {
       listen<string>(`session-status-${id}`, (event) => {
+        if (cancelled) return;
+
         const newStatus = event.payload as SessionStatus;
-        const prevSession = sessions.find((s) => s.id === id);
+        const prevSession = sessionsRef.current.find((s) => s.id === id);
         const prevStatus = prevSession?.status;
 
         dispatch({ type: "UPDATE_STATUS", id, status: newStatus });
 
         // Fire notification on "waiting" transition
         if (newStatus === "waiting" && notifPermissionRef.current) {
-          const session = sessions.find((s) => s.id === id);
+          const session = sessionsRef.current.find((s) => s.id === id);
           sendNotification({
             title: "NextDialog",
             body: `${session?.name ?? "Session"} is waiting for input`,
@@ -84,14 +89,19 @@ export function useStatus(sessionIds: string[]) {
           }
         }
       }).then((unlisten) => {
-        unlisteners.push(unlisten);
+        if (cancelled) {
+          unlisten();
+        } else {
+          unlisteners.push(unlisten);
+        }
       });
     }
 
     return () => {
+      cancelled = true;
       for (const unlisten of unlisteners) {
         unlisten();
       }
     };
-  }, [sessionIds.join(","), dispatch, sessions]);
+  }, [sessionIds.join(","), dispatch]);
 }

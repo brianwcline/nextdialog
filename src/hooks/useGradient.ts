@@ -7,7 +7,7 @@ interface GradientConfig {
 }
 
 function computeMoodHues(statuses: SessionStatus[]): [number, number, number] {
-  if (statuses.length === 0) return [240, 260, 220]; // default cool blue/purple
+  if (statuses.length === 0) return [330, 20, 280]; // warm pink/peach/lavender
 
   const hasError = statuses.some((s) => s === "error");
   const hasWaiting = statuses.some((s) => s === "waiting");
@@ -29,17 +29,17 @@ function computeMoodHues(statuses: SessionStatus[]): [number, number, number] {
     return [270, 290, 250];
   }
   if (allIdle) {
-    // Cool blue/green
-    return [180, 200, 160];
+    // Warm pink/coral/lavender
+    return [340, 10, 270];
   }
-  // Mixed/default
-  return [240, 260, 220];
+  // Mixed/default — warm pink/peach/lavender
+  return [330, 20, 280];
 }
 
 export function useGradient({ canvasRef, sessionStatuses = [] }: GradientConfig) {
   const frameRef = useRef<number>(0);
-  const targetHuesRef = useRef<[number, number, number]>([240, 260, 220]);
-  const currentHuesRef = useRef<[number, number, number]>([240, 260, 220]);
+  const targetHuesRef = useRef<[number, number, number]>([330, 20, 280]);
+  const currentHuesRef = useRef<[number, number, number]>([330, 20, 280]);
 
   // Update target hues when statuses change
   useEffect(() => {
@@ -74,8 +74,8 @@ export function useGradient({ canvasRef, sessionStatuses = [] }: GradientConfig)
         currentHuesRef.current[i] += diff * lerpRate;
       }
 
-      // Base fill
-      ctx.fillStyle = "#F0EEFF";
+      // Base fill — warm cream
+      ctx.fillStyle = "#FBF5F3";
       ctx.fillRect(0, 0, w, h);
 
       // Three radial gradients with different periods
@@ -109,9 +109,9 @@ export function useGradient({ canvasRef, sessionStatuses = [] }: GradientConfig)
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
         gradient.addColorStop(
           0,
-          `hsla(${hue}, 80%, 75%, 0.4)`,
+          `hsla(${hue}, 70%, 82%, 0.3)`,
         );
-        gradient.addColorStop(1, `hsla(${hue}, 80%, 75%, 0)`);
+        gradient.addColorStop(1, `hsla(${hue}, 70%, 82%, 0)`);
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, w, h);

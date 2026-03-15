@@ -17,6 +17,8 @@ pub struct SessionConfig {
     pub session_type: String,
     #[serde(default)]
     pub parked: bool,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 fn default_session_type() -> String {
@@ -36,4 +38,6 @@ pub struct CreateSessionRequest {
     pub initial_prompt: Option<String>,
     #[serde(default = "default_session_type")]
     pub session_type: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
