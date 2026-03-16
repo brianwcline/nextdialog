@@ -21,6 +21,7 @@ export function useTerminal({
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const initRef = useRef(false);
+  const isAtBottomRef = useRef(true);
 
   // Create terminal once
   useEffect(() => {
@@ -42,8 +43,15 @@ export function useTerminal({
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
-    // Write input to PTY
+    // Track whether viewport is at the bottom of scrollback
+    term.onScroll(() => {
+      const buf = term.buffer.active;
+      isAtBottomRef.current = buf.baseY + term.rows >= buf.length;
+    });
+
+    // Write input to PTY — always snap to bottom so the user sees the prompt
     term.onData((data) => {
+      term.scrollToBottom();
       invoke("write_to_pty", { id: sessionId, data }).catch(console.error);
     });
 
@@ -74,7 +82,11 @@ export function useTerminal({
     let unlistenExit: UnlistenFn | null = null;
 
     listen<string>(`pty-data-${sessionId}`, (event) => {
+      const wasAtBottom = isAtBottomRef.current;
       term.write(event.payload);
+      if (wasAtBottom) {
+        term.scrollToBottom();
+      }
     }).then((fn) => {
       unlistenData = fn;
     });
