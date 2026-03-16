@@ -30,9 +30,9 @@ src-tauri/.cargo/config.toml
 .claude/
 
 # Internal docs / separate projects
+docs/internal/
 configs/
 REFERENCE/
 design/
 website/
 nextdialog-api/
-WEBSITE-SPEC.md
