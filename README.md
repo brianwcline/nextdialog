@@ -48,17 +48,18 @@ Community builds have **telemetry disabled by default**. No API credentials are 
 
 Official release builds collect anonymous usage events (session lifecycle, feature usage) and opt-in feedback. No personally identifiable information is collected. See `src-tauri/src/telemetry.rs` for the full implementation.
 
+## Download
+
+Pre-built binaries for macOS (Apple Silicon & Intel), Linux, and Windows are available at [nextdialog.io](https://nextdialog.io) and on the [GitHub Releases](https://github.com/brianwcline/nextdialog/releases) page. macOS builds are signed and notarized.
+
 ## Philosophy
 
 NextDialog is designed for how developers *feel*, not how computers perform. Every tool in the multi-agent space competes on features — more panels, more config, more density. NextDialog competes on calm.
 
-Read more: [PHILOSOPHY.md](PHILOSOPHY.md) | [BRAND.md](BRAND.md)
-
 ## Known limitations
 
-- **No code signing** — macOS and Windows will show "unidentified developer" warnings. Code signing is planned for a future release.
 - **No auto-updater** — Manual downloads for now.
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2025 Brian Cline
+[MIT](LICENSE) — Copyright (c) 2026 Brian Cline
