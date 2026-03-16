@@ -93,7 +93,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                   onChange={(e) => setText(e.target.value)}
                   placeholder="What's on your mind?"
                   rows={4}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
                   autoFocus
                 />
 
@@ -109,7 +109,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                         onClick={() => setSeverity(s)}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                           severity === s
-                            ? "bg-indigo-500 text-white"
+                            ? "bg-violet-400 text-white"
                             : "bg-white/50 text-slate-600 hover:bg-white/70"
                         }`}
                       >
@@ -131,7 +131,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                         onClick={() => setCategory(c)}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                           category === c
-                            ? "bg-indigo-500 text-white"
+                            ? "bg-violet-400 text-white"
                             : "bg-white/50 text-slate-600 hover:bg-white/70"
                         }`}
                       >
@@ -153,7 +153,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                     type="button"
                     onClick={handleSubmit}
                     disabled={!text.trim() || submitting}
-                    className="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition-colors shadow-md disabled:opacity-50"
+                    className="px-4 py-2 rounded-lg bg-violet-400 text-white text-sm font-medium hover:bg-violet-500 transition-colors shadow-md disabled:opacity-50"
                   >
                     {submitting ? "Sending..." : "Send"}
                   </button>

@@ -9,6 +9,46 @@ fn default_enabled() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentConfig {
+    /// Permission mode: "default", "acceptEdits", "plan", "bypassPermissions"
+    #[serde(default)]
+    pub permission_mode: Option<String>,
+    /// Specific tools to auto-allow (--allowedTools)
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
+    /// Specific tools to block (--disallowedTools)
+    #[serde(default)]
+    pub disallowed_tools: Vec<String>,
+    /// Model alias or full ID (--model)
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Path to MCP config JSON (--mcp-config)
+    #[serde(default)]
+    pub mcp_config_path: Option<String>,
+    /// Appended to system prompt (--append-system-prompt)
+    #[serde(default)]
+    pub append_system_prompt: Option<String>,
+    /// Max agentic turns (--max-turns)
+    #[serde(default)]
+    pub max_turns: Option<u32>,
+    /// Enable verbose output (--verbose)
+    #[serde(default)]
+    pub verbose: bool,
+    /// Enable Chrome browser integration (--chrome / --no-chrome)
+    #[serde(default)]
+    pub chrome_enabled: Option<bool>,
+    /// Additional directories (--add-dir)
+    #[serde(default)]
+    pub additional_dirs: Vec<String>,
+    /// Raw custom CLI args (escape hatch for anything not modeled)
+    #[serde(default)]
+    pub custom_args: Vec<String>,
+    /// Custom env vars (merged with session type env)
+    #[serde(default)]
+    pub custom_env: HashMap<String, String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionType {
     pub id: String,
@@ -25,6 +65,8 @@ pub struct SessionType {
     pub builtin: bool,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    #[serde(default)]
+    pub agent_config: AgentConfig,
 }
 
 fn builtin_types() -> Vec<SessionType> {
@@ -35,11 +77,12 @@ fn builtin_types() -> Vec<SessionType> {
             command: "claude".to_string(),
             args: vec![],
             icon: "/icons/anthropic.svg".to_string(),
-            color: "#6366f1".to_string(),
+            color: "#e87f5f".to_string(),
             env: HashMap::new(),
             status_patterns: HashMap::new(),
             builtin: true,
             enabled: true,
+            agent_config: AgentConfig::default(),
         },
         SessionType {
             id: "aider".to_string(),
@@ -55,6 +98,7 @@ fn builtin_types() -> Vec<SessionType> {
             ]),
             builtin: true,
             enabled: true,
+            agent_config: AgentConfig::default(),
         },
         SessionType {
             id: "codex-cli".to_string(),
@@ -67,6 +111,7 @@ fn builtin_types() -> Vec<SessionType> {
             status_patterns: HashMap::new(),
             builtin: true,
             enabled: true,
+            agent_config: AgentConfig::default(),
         },
         SessionType {
             id: "gemini-cli".to_string(),
@@ -81,18 +126,20 @@ fn builtin_types() -> Vec<SessionType> {
             ]),
             builtin: true,
             enabled: true,
+            agent_config: AgentConfig::default(),
         },
         SessionType {
             id: "openclaw".to_string(),
             name: "OpenClaw".to_string(),
             command: "openclaw".to_string(),
             args: vec!["tui".to_string()],
-            icon: "/icons/openclaw.svg".to_string(),
+            icon: "🦞".to_string(),
             color: "#dc2626".to_string(),
             env: HashMap::new(),
             status_patterns: HashMap::new(),
             builtin: true,
             enabled: true,
+            agent_config: AgentConfig::default(),
         },
         SessionType {
             id: "terminal".to_string(),
@@ -107,6 +154,7 @@ fn builtin_types() -> Vec<SessionType> {
             ]),
             builtin: true,
             enabled: true,
+            agent_config: AgentConfig::default(),
         },
     ]
 }
@@ -133,10 +181,12 @@ impl SessionTypeManager {
             let builtins = builtin_types();
             for builtin in &builtins {
                 if let Some(existing) = saved.iter_mut().find(|t| t.id == builtin.id) {
-                    // Update builtin fields but preserve user's enabled state
+                    // Update builtin fields but preserve user's enabled state and config
                     let user_enabled = existing.enabled;
+                    let user_config = existing.agent_config.clone();
                     *existing = builtin.clone();
                     existing.enabled = user_enabled;
+                    existing.agent_config = user_config;
                 } else {
                     saved.push(builtin.clone());
                 }
@@ -192,8 +242,9 @@ impl SessionTypeManager {
             .find(|t| t.id == session_type.id)
             .ok_or_else(|| format!("Session type not found: {}", session_type.id))?;
         if existing.builtin {
-            // For built-ins, only allow toggling enabled
+            // For built-ins, allow toggling enabled and updating agent config
             existing.enabled = session_type.enabled;
+            existing.agent_config = session_type.agent_config;
         } else {
             *existing = SessionType {
                 builtin: false,

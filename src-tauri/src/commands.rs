@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
+use crate::hooks::manager::HookManager;
 use crate::pty::pool::PtyPool;
 use crate::session::config::{CreateSessionRequest, SessionConfig};
 use crate::session::file_tracker::{FileConflict, FileTracker};
@@ -37,7 +38,13 @@ pub fn create_session(
 }
 
 #[tauri::command]
-pub fn remove_session(manager: State<'_, SessionManager>, id: String) -> Result<(), String> {
+pub fn remove_session(
+    manager: State<'_, SessionManager>,
+    hook_manager: State<'_, HookManager>,
+    id: String,
+) -> Result<(), String> {
+    // Teardown hooks before removing — no-op if hooks aren't active
+    hook_manager.teardown_session(&id);
     manager.remove(&id)
 }
 
@@ -80,6 +87,8 @@ pub fn spawn_pty_session(
     manager: State<'_, SessionManager>,
     type_manager: State<'_, SessionTypeManager>,
     file_tracker: State<'_, FileTracker>,
+    hook_manager: State<'_, HookManager>,
+    settings_manager: State<'_, SettingsManager>,
     app_handle: AppHandle,
     id: String,
     rows: Option<u16>,
@@ -92,6 +101,15 @@ pub fn spawn_pty_session(
     let session_type = type_manager
         .get(&session.session_type)
         .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
+
+    // Set up hooks for Claude Code sessions (graceful degradation on failure)
+    if session_type.id == "claude-code" && settings_manager.get().hooks_enabled {
+        match hook_manager.setup_session(&id, &session.working_directory, &app_handle) {
+            Ok(true) => {} // Hooks active
+            Ok(false) => eprintln!("[hooks] Skipped for session {id} (no port or config error)"),
+            Err(e) => eprintln!("[hooks] Setup failed for session {id}: {e}"),
+        }
+    }
 
     pool.spawn(
         &id,
@@ -129,19 +147,24 @@ pub fn kill_pty_session(
     pool: State<'_, PtyPool>,
     manager: State<'_, SessionManager>,
     file_tracker: State<'_, FileTracker>,
+    hook_manager: State<'_, HookManager>,
     id: String,
 ) -> Result<(), String> {
     pool.kill(&id)?;
     file_tracker.unregister_session(&id);
+    hook_manager.teardown_session(&id);
     manager.update_status(&id, "stopped");
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn restart_pty_session(
     pool: State<'_, PtyPool>,
     manager: State<'_, SessionManager>,
     type_manager: State<'_, SessionTypeManager>,
+    hook_manager: State<'_, HookManager>,
+    settings_manager: State<'_, SettingsManager>,
     app_handle: AppHandle,
     id: String,
     rows: Option<u16>,
@@ -155,6 +178,9 @@ pub fn restart_pty_session(
         .get(&session.session_type)
         .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
 
+    // Teardown old hooks before restart
+    hook_manager.teardown_session(&id);
+
     pool.restart(
         &id,
         &session_type,
@@ -164,6 +190,15 @@ pub fn restart_pty_session(
         cols.unwrap_or(80),
         &app_handle,
     )?;
+
+    // Set up fresh hooks for the restarted session
+    if session_type.id == "claude-code" && settings_manager.get().hooks_enabled {
+        match hook_manager.setup_session(&id, &session.working_directory, &app_handle) {
+            Ok(true) => {}
+            Ok(false) => eprintln!("[hooks] Skipped for restarted session {id}"),
+            Err(e) => eprintln!("[hooks] Setup failed for restarted session {id}: {e}"),
+        }
+    }
 
     manager.update_status(&id, "starting");
     Ok(())
@@ -299,6 +334,16 @@ pub fn flush_telemetry(telemetry: State<'_, TelemetryClient>) -> Result<(), Stri
 #[tauri::command]
 pub fn get_resolved_path() -> String {
     std::env::var("PATH").unwrap_or_default()
+}
+
+// ── Hooks ──
+
+#[tauri::command]
+pub fn get_hook_status(
+    hook_manager: State<'_, HookManager>,
+    id: String,
+) -> bool {
+    hook_manager.is_active(&id)
 }
 
 // ── Intelligence ──

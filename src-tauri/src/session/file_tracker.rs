@@ -39,6 +39,16 @@ impl FileTracker {
         self.modified_files.lock().unwrap().remove(id);
     }
 
+    /// Record a file write from a hook event (real-time, augments git polling).
+    pub fn record_write(&self, session_id: &str, file_path: &str) {
+        self.modified_files
+            .lock()
+            .unwrap()
+            .entry(session_id.to_string())
+            .or_default()
+            .insert(file_path.to_string());
+    }
+
     pub fn get_conflicts(&self) -> Vec<FileConflict> {
         let files_map = self.modified_files.lock().unwrap();
         let mut file_to_sessions: HashMap<&String, Vec<String>> = HashMap::new();

@@ -13,6 +13,7 @@ import { SessionDock } from "./components/SessionDock";
 import { FeedbackModal } from "./components/FeedbackModal";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
+import { useHookEvents } from "./hooks/useHookEvents";
 import { useSessionTypes } from "./hooks/useSessionTypes";
 import { trackEvent } from "./lib/telemetry";
 import {
@@ -62,6 +63,7 @@ function AppContent() {
   const { sessions, createSession, removeSession, loadSessions } = useSession();
   const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions]);
   useStatus(sessionIds);
+  useHookEvents(sessionIds);
   const { sessionTypes, updateType, createType, deleteType } = useSessionTypes();
 
   const activeSessions = useMemo(
@@ -345,14 +347,6 @@ function AppContent() {
       ]
     : [];
 
-  const companionCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const [parentId, companions] of Object.entries(companionMap)) {
-      counts[parentId] = companions.length;
-    }
-    return counts;
-  }, [companionMap]);
-
   const typeMap = useMemo(() => {
     const map: Record<string, typeof sessionTypes[0]> = {};
     for (const t of sessionTypes) {
@@ -378,7 +372,6 @@ function AppContent() {
           trackEvent("feedback.opened", "feedback");
         }}
         sessionTypeMap={typeMap}
-        companionCounts={companionCounts}
         activeSessionId={activeSessionId}
       />
       <NewSessionModal

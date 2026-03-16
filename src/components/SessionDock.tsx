@@ -35,7 +35,7 @@ export function SessionDock({
                 title={`Unpark ${session.name}`}
               >
                 {st && (
-                  <SessionTypeIcon icon={st.icon} color={st.color} />
+                  <SessionTypeIcon id={st.id} icon={st.icon} color={st.color} />
                 )}
                 <span className="text-slate-700 truncate max-w-[100px]">
                   {session.name}

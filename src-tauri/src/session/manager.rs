@@ -22,12 +22,17 @@ impl SessionManager {
 
         let storage_path = config_dir.join("sessions.json");
 
-        let sessions = if storage_path.exists() {
+        let mut sessions: Vec<SessionConfig> = if storage_path.exists() {
             let data = fs::read_to_string(&storage_path).unwrap_or_default();
             serde_json::from_str(&data).unwrap_or_default()
         } else {
             Vec::new()
         };
+
+        // No PTY is running on fresh launch — reset all to "ready"
+        for s in &mut sessions {
+            s.status = "ready".to_string();
+        }
 
         Self {
             sessions: Mutex::new(sessions),
@@ -64,7 +69,7 @@ impl SessionManager {
             initial_prompt: req.initial_prompt,
             created_at: now,
             last_active: now,
-            status: "stopped".to_string(),
+            status: "ready".to_string(),
             session_type: req.session_type,
             parked: false,
             parent_id: req.parent_id,

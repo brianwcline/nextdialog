@@ -4,7 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Toggle } from "./Toggle";
 import { SessionTypeIcon } from "./SessionTypeIcon";
+import { ConfigureModal } from "./ConfigureModal";
 import type { SessionType } from "../lib/types";
+import { defaultAgentConfig } from "../lib/types";
 
 interface Settings {
   default_directory: string;
@@ -15,6 +17,9 @@ interface Settings {
   intelligence_api_url: string;
   machine_id: string;
   telemetry_enabled: boolean;
+  hooks_enabled: boolean;
+  hook_port_start: number;
+  hook_port_end: number;
 }
 
 interface SettingsViewProps {
@@ -43,14 +48,17 @@ export function SettingsView({
     intelligence_api_url: "",
     machine_id: "",
     telemetry_enabled: false,
+    hooks_enabled: true,
+    hook_port_start: 7432,
+    hook_port_end: 7499,
   });
 
   const [showAddForm, setShowAddForm] = useState(false);
+  const [configureType, setConfigureType] = useState<SessionType | null>(null);
   const [newName, setNewName] = useState("");
   const [newCommand, setNewCommand] = useState("");
   const [newIcon, setNewIcon] = useState("");
   const [newColor, setNewColor] = useState("#6366f1");
-  const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -91,6 +99,7 @@ export function SettingsView({
       status_patterns: {},
       builtin: false,
       enabled: true,
+      agent_config: { ...defaultAgentConfig },
     });
 
     setNewName("");
@@ -101,6 +110,7 @@ export function SettingsView({
   };
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -123,12 +133,6 @@ export function SettingsView({
             </h2>
 
             <div className="space-y-5">
-              <Toggle
-                checked={settings.default_skip_permissions}
-                onChange={(v) => save({ default_skip_permissions: v })}
-                label="Skip permissions by default"
-              />
-
               <div>
                 <label className="block text-sm font-medium text-slate-600 mb-1">
                   Default Directory
@@ -141,7 +145,7 @@ export function SettingsView({
                       save({ default_directory: e.target.value })
                     }
                     placeholder="~/projects"
-                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
                   />
                   <button
                     type="button"
@@ -173,7 +177,7 @@ export function SettingsView({
                       className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/40"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <SessionTypeIcon icon={st.icon} color={st.color} />
+                        <SessionTypeIcon id={st.id} icon={st.icon} color="#94a3b8" />
                         <span className="text-sm text-slate-700 truncate">
                           {st.name}
                         </span>
@@ -193,6 +197,17 @@ export function SettingsView({
                             Delete
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setConfigureType(st)}
+                          className="text-slate-300 hover:text-violet-400 transition-colors"
+                          title="Configure"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="8" cy="8" r="2.5" />
+                            <path d="M6.83 2.17a.5.5 0 0 1 .49-.4h1.36a.5.5 0 0 1 .49.4l.2 1.1a4.5 4.5 0 0 1 1.09.63l1.05-.35a.5.5 0 0 1 .58.2l.68 1.18a.5.5 0 0 1-.1.6l-.85.75a4.5 4.5 0 0 1 0 1.24l.85.75a.5.5 0 0 1 .1.6l-.68 1.18a.5.5 0 0 1-.58.2l-1.05-.35a4.5 4.5 0 0 1-1.09.63l-.2 1.1a.5.5 0 0 1-.49.4H7.32a.5.5 0 0 1-.49-.4l-.2-1.1a4.5 4.5 0 0 1-1.09-.63l-1.05.35a.5.5 0 0 1-.58-.2l-.68-1.18a.5.5 0 0 1 .1-.6l.85-.75a4.5 4.5 0 0 1 0-1.24l-.85-.75a.5.5 0 0 1-.1-.6l.68-1.18a.5.5 0 0 1 .58-.2l1.05.35a4.5 4.5 0 0 1 1.09-.63l.2-1.1Z" />
+                          </svg>
+                        </button>
                         <Toggle
                           checked={st.enabled}
                           onChange={() => handleToggleType(st)}
@@ -214,7 +229,7 @@ export function SettingsView({
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
                         placeholder="My Agent"
-                        className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+                        className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
                       />
                     </div>
                     <div>
@@ -226,7 +241,7 @@ export function SettingsView({
                         value={newCommand}
                         onChange={(e) => setNewCommand(e.target.value)}
                         placeholder="e.g. openclaw tui"
-                        className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+                        className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
                       />
                     </div>
                     <div className="flex gap-3">
@@ -240,7 +255,7 @@ export function SettingsView({
                           onChange={(e) => setNewIcon(e.target.value)}
                           placeholder="~"
                           maxLength={2}
-                          className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white/60 text-slate-800 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+                          className="w-full px-2.5 py-1.5 rounded-md border border-slate-200 bg-white/60 text-slate-800 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
                         />
                       </div>
                       <div>
@@ -267,7 +282,7 @@ export function SettingsView({
                         type="button"
                         onClick={handleAddType}
                         disabled={!newName.trim() || !newCommand.trim()}
-                        className="px-3 py-1.5 text-xs bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 text-xs bg-violet-400 text-white rounded-md hover:bg-violet-500 transition-colors disabled:opacity-50"
                       >
                         Add
                       </button>
@@ -277,88 +292,14 @@ export function SettingsView({
                   <button
                     type="button"
                     onClick={() => setShowAddForm(true)}
-                    className="mt-2 text-sm text-indigo-500 hover:text-indigo-600 transition-colors"
+                    className="mt-2 text-sm text-violet-400 hover:text-violet-500 transition-colors"
                   >
                     + Add custom type...
                   </button>
                 )}
               </div>
 
-              {/* NextDialog Intelligence */}
-              <div className="border-t border-slate-200 pt-4">
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                  NextDialog Intelligence
-                </h3>
-                <Toggle
-                  checked={settings.intelligence_enabled}
-                  onChange={(v) => save({ intelligence_enabled: v })}
-                  label="Enable NextDialog Intelligence"
-                />
-
-                {settings.intelligence_enabled && (
-                  <div className="mt-3 space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">
-                        Provider
-                      </label>
-                      <select
-                        value={settings.intelligence_provider}
-                        onChange={(e) =>
-                          save({ intelligence_provider: e.target.value })
-                        }
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                      >
-                        <option value="">Select a provider...</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="gemini">Gemini</option>
-                        <option value="ollama">Ollama</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">
-                        API Key
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type={showApiKey ? "text" : "password"}
-                          value={settings.intelligence_api_key}
-                          onChange={(e) =>
-                            save({ intelligence_api_key: e.target.value })
-                          }
-                          placeholder="sk-..."
-                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs hover:bg-slate-200 transition-colors"
-                        >
-                          {showApiKey ? "Hide" : "Show"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {settings.intelligence_provider === "ollama" && (
-                      <div>
-                        <label className="block text-xs font-medium text-slate-500 mb-1">
-                          API URL
-                        </label>
-                        <input
-                          type="text"
-                          value={settings.intelligence_api_url}
-                          onChange={(e) =>
-                            save({ intelligence_api_url: e.target.value })
-                          }
-                          placeholder="http://localhost:11434"
-                          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {/* NextDialog Intelligence — hidden until feature is rethought */}
 
               {/* Telemetry */}
               <div className="border-t border-slate-200 pt-4">
@@ -379,7 +320,7 @@ export function SettingsView({
             <div className="flex justify-end mt-6">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition-colors shadow-md"
+                className="px-4 py-2 rounded-lg bg-violet-400 text-white text-sm font-medium hover:bg-violet-500 transition-colors shadow-md"
               >
                 Done
               </button>
@@ -388,5 +329,22 @@ export function SettingsView({
         </motion.div>
       )}
     </AnimatePresence>
+
+    {configureType && (
+      <ConfigureModal
+        isOpen={configureType !== null}
+        onClose={() => setConfigureType(null)}
+        sessionType={configureType}
+        onSave={async (updated) => {
+          await onUpdateType?.(updated);
+          setConfigureType(null);
+        }}
+        skipPermissions={settings.default_skip_permissions}
+        onSkipPermissionsChange={(v) => save({ default_skip_permissions: v })}
+        hooksEnabled={settings.hooks_enabled}
+        onHooksEnabledChange={(v) => save({ hooks_enabled: v })}
+      />
+    )}
+    </>
   );
 }

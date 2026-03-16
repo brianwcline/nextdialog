@@ -1,6 +1,7 @@
 import type { SessionStatus } from "../lib/types";
 
 const statusColors: Record<SessionStatus, string> = {
+  ready: "#94A3B8",
   stopped: "#94A3B8",
   starting: "#A78BFA",
   idle: "#22C55E",
@@ -11,6 +12,7 @@ const statusColors: Record<SessionStatus, string> = {
 };
 
 const statusGlows: Record<SessionStatus, string> = {
+  ready: "none",
   stopped: "none",
   starting: "none",
   idle: "none",

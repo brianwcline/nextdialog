@@ -1,4 +1,5 @@
 export type SessionStatus =
+  | "ready"
   | "stopped"
   | "starting"
   | "idle"
@@ -19,7 +20,34 @@ export interface Session {
   session_type: string;
   parked: boolean;
   parent_id?: string;
+  hookEnabled?: boolean;
+  lastToolUse?: string;
+  hookNotification?: string;
 }
+
+export interface AgentConfig {
+  permission_mode?: string;
+  allowed_tools: string[];
+  disallowed_tools: string[];
+  model?: string;
+  mcp_config_path?: string;
+  append_system_prompt?: string;
+  max_turns?: number;
+  verbose: boolean;
+  chrome_enabled?: boolean;
+  additional_dirs: string[];
+  custom_args: string[];
+  custom_env: Record<string, string>;
+}
+
+export const defaultAgentConfig: AgentConfig = {
+  allowed_tools: [],
+  disallowed_tools: [],
+  verbose: false,
+  additional_dirs: [],
+  custom_args: [],
+  custom_env: {},
+};
 
 export interface SessionType {
   id: string;
@@ -32,4 +60,5 @@ export interface SessionType {
   status_patterns: Record<string, string>;
   builtin: boolean;
   enabled: boolean;
+  agent_config: AgentConfig;
 }

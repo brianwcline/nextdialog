@@ -1,5 +1,6 @@
 mod clipboard;
 mod commands;
+mod hooks;
 mod pty;
 mod session;
 mod settings;
@@ -9,6 +10,7 @@ mod telemetry;
 
 use tauri::Manager;
 
+use hooks::manager::HookManager;
 use pty::pool::PtyPool;
 use session::file_tracker::FileTracker;
 use session::manager::SessionManager;
@@ -35,8 +37,23 @@ pub fn run() {
         .manage(SessionTypeManager::new())
         .manage(file_tracker)
         .manage(IntelligenceManager::new())
+        .manage(HookManager::new())
         .manage(telemetry_client)
         .setup(|app| {
+            // Clean stale hooks from any previous crash/force-quit
+            let sessions = app.state::<SessionManager>();
+            let dirs: Vec<String> = sessions
+                .list()
+                .iter()
+                .filter(|s| s.session_type == "claude-code")
+                .map(|s| s.working_directory.clone())
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            if !dirs.is_empty() {
+                HookManager::cleanup_stale_hooks(&dirs);
+            }
+
             let tracker = app.state::<FileTracker>();
             tracker.start_polling(app.handle().clone());
 
@@ -76,7 +93,14 @@ pub fn run() {
             commands::submit_feedback,
             commands::track_event,
             commands::flush_telemetry,
+            commands::get_hook_status,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                let hook_manager = window.state::<HookManager>();
+                hook_manager.teardown_all();
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

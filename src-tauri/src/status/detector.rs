@@ -13,7 +13,19 @@ pub enum SessionStatus {
     Working,
     Planning,
     Waiting,
+    #[allow(dead_code)]
     Error,
+}
+
+/// Status override from hook events (prevents silence checker from overriding).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookStatus {
+    /// No hook override — defer to scraping.
+    None,
+    /// Hook confirmed idle (e.g., Stop event).
+    Idle,
+    /// Hook confirmed waiting (e.g., Notification event).
+    Waiting,
 }
 
 /// Auxiliary data extracted from PTY output beyond simple status.
@@ -31,7 +43,6 @@ pub struct StatusDetector {
     line_buffer: String,
     idle_re: Regex,
     waiting_re: Regex,
-    error_re: Regex,
     planning_re: Regex,
     context_re: Regex,
     // Plan summary tracking
@@ -39,6 +50,8 @@ pub struct StatusDetector {
     capturing_plan: bool,
     // Extras
     extras: DetectorExtras,
+    // Hook-confirmed status (prevents silence checker from overriding)
+    hook_status: HookStatus,
 }
 
 impl StatusDetector {
@@ -62,12 +75,12 @@ impl StatusDetector {
             line_buffer: String::new(),
             idle_re: get("idle", r"^[>❯]\s*$"),
             waiting_re: get("waiting", r"\?\s*$|\(y/n\)|\(Y/n\)|\[Y/n\]|\[y/N\]"),
-            error_re: get("error", r"(?i)Error:|ERROR|panic"),
             planning_re: get("planning", r"(?i)plan mode"),
             context_re: Regex::new(r"(\d+(?:\.\d+)?)%\s*(?:of\s+)?context").unwrap(),
             plan_lines: Vec::new(),
             capturing_plan: false,
             extras: DetectorExtras::default(),
+            hook_status: HookStatus::None,
         }
     }
 
@@ -75,9 +88,16 @@ impl StatusDetector {
         &self.extras
     }
 
+    /// Set hook-confirmed status. Prevents silence checker from overriding.
+    pub fn set_hook_status(&mut self, status: HookStatus) {
+        self.hook_status = status;
+    }
+
     /// Process raw bytes from PTY. Returns Some(new_status) on transition.
     pub fn process_bytes(&mut self, data: &[u8]) -> Option<SessionStatus> {
         self.last_output_time = Instant::now();
+        // New output clears hook status — scraping takes over
+        self.hook_status = HookStatus::None;
 
         // Strip ANSI escapes
         let stripped = strip_ansi_escapes::strip(data);
@@ -86,9 +106,7 @@ impl StatusDetector {
         let prev = self.current;
 
         // Set working since we're receiving output
-        if self.current != SessionStatus::Working
-            && self.current != SessionStatus::Error
-        {
+        if self.current != SessionStatus::Working {
             self.current = SessionStatus::Working;
         }
 
@@ -116,7 +134,27 @@ impl StatusDetector {
     }
 
     /// Check for silence (call this periodically). Returns Some if transitioned.
+    /// Respects hook-confirmed status to avoid overriding structured signals.
     pub fn check_silence(&mut self, threshold_secs: f64) -> Option<SessionStatus> {
+        // If hook has confirmed a status, don't let silence override it
+        match self.hook_status {
+            HookStatus::Idle => {
+                if self.current != SessionStatus::Idle {
+                    self.current = SessionStatus::Idle;
+                    return Some(SessionStatus::Idle);
+                }
+                return None;
+            }
+            HookStatus::Waiting => {
+                if self.current != SessionStatus::Waiting {
+                    self.current = SessionStatus::Waiting;
+                    return Some(SessionStatus::Waiting);
+                }
+                return None;
+            }
+            HookStatus::None => {}
+        }
+
         if self.current == SessionStatus::Working
             && self.last_output_time.elapsed().as_secs_f64() > threshold_secs
         {
@@ -151,8 +189,6 @@ impl StatusDetector {
             self.plan_lines.clear();
         } else if self.waiting_re.is_match(line) {
             self.current = SessionStatus::Waiting;
-        } else if self.error_re.is_match(line) {
-            self.current = SessionStatus::Error;
         }
 
         // Capture plan summary lines (first 3 non-empty lines after entering plan mode)

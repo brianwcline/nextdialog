@@ -13,7 +13,7 @@ function computeMoodHues(statuses: SessionStatus[]): [number, number, number] {
   const hasWaiting = statuses.some((s) => s === "waiting");
   const workingCount = statuses.filter((s) => s === "working").length;
   const allIdle = statuses.every(
-    (s) => s === "idle" || s === "stopped",
+    (s) => s === "idle" || s === "stopped" || s === "ready",
   );
 
   if (hasError) {

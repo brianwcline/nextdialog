@@ -10,7 +10,7 @@ use crate::intelligence::IntelligenceManager;
 use crate::pty::activity::ActivityTracker;
 use crate::settings::SettingsManager;
 use crate::session::types::SessionType;
-use crate::status::detector::{SessionStatus, StatusDetector};
+use crate::status::detector::{HookStatus, SessionStatus, StatusDetector};
 
 struct PtySession {
     master: Box<dyn MasterPty + Send>,
@@ -267,7 +267,7 @@ impl PtyPool {
                         let _ = handle.emit(&format!("pty-exit-{session_id}"), ());
                         let _ = handle.emit(
                             &format!("session-status-{session_id}"),
-                            "stopped",
+                            "error",
                         );
                         break;
                     }
@@ -315,7 +315,8 @@ impl PtyPool {
 
         // Claude-specific flags
         if session_type.id == "claude-code" {
-            if skip_permissions {
+            // permission_mode takes precedence over skip_permissions
+            if session_type.agent_config.permission_mode.is_none() && skip_permissions {
                 cmd.arg("--dangerously-skip-permissions");
             }
             if let Some(prompt) = initial_prompt {
@@ -325,6 +326,9 @@ impl PtyPool {
                 }
             }
         }
+
+        // Apply per-type agent configuration
+        apply_agent_config(&mut cmd, session_type);
 
         cmd.cwd(cwd);
 
@@ -399,6 +403,13 @@ impl PtyPool {
             .unwrap_or_default()
     }
 
+    /// Set hook-confirmed status on a session's detector.
+    pub fn set_hook_status(&self, id: &str, status: HookStatus) {
+        if let Some(detector) = self.detectors.lock().unwrap().get(id) {
+            detector.lock().unwrap().set_hook_status(status);
+        }
+    }
+
     pub fn kill(&self, id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().unwrap();
         if let Some(mut session) = sessions.remove(id) {
@@ -436,7 +447,7 @@ impl PtyPool {
         // Claude-specific: use --continue on restart
         if session_type.id == "claude-code" {
             cmd.arg("--continue");
-            if skip_permissions {
+            if session_type.agent_config.permission_mode.is_none() && skip_permissions {
                 cmd.arg("--dangerously-skip-permissions");
             }
         }
@@ -445,6 +456,9 @@ impl PtyPool {
         for arg in &session_type.args {
             cmd.arg(arg);
         }
+
+        // Apply per-type agent configuration
+        apply_agent_config(&mut cmd, session_type);
 
         cmd.cwd(cwd);
 
@@ -463,5 +477,63 @@ impl PtyPool {
         };
 
         self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
+    }
+}
+
+/// Translate AgentConfig fields into CLI arguments and env vars on the command.
+fn apply_agent_config(cmd: &mut CommandBuilder, session_type: &SessionType) {
+    let config = &session_type.agent_config;
+
+    if session_type.id == "claude-code" {
+        if let Some(mode) = &config.permission_mode {
+            cmd.arg("--permission-mode");
+            cmd.arg(mode);
+        }
+        for tool in &config.allowed_tools {
+            cmd.arg("--allowedTools");
+            cmd.arg(tool);
+        }
+        for tool in &config.disallowed_tools {
+            cmd.arg("--disallowedTools");
+            cmd.arg(tool);
+        }
+        if let Some(model) = &config.model {
+            cmd.arg("--model");
+            cmd.arg(model);
+        }
+        if let Some(mcp) = &config.mcp_config_path {
+            cmd.arg("--mcp-config");
+            cmd.arg(mcp);
+        }
+        if let Some(prompt) = &config.append_system_prompt {
+            cmd.arg("--append-system-prompt");
+            cmd.arg(prompt);
+        }
+        if let Some(turns) = config.max_turns {
+            cmd.arg("--max-turns");
+            cmd.arg(turns.to_string());
+        }
+        if config.verbose {
+            cmd.arg("--verbose");
+        }
+        match config.chrome_enabled {
+            Some(true) => { cmd.arg("--chrome"); }
+            Some(false) => { cmd.arg("--no-chrome"); }
+            None => {}
+        }
+        for dir in &config.additional_dirs {
+            cmd.arg("--add-dir");
+            cmd.arg(dir);
+        }
+    }
+
+    // Generic: custom args (works for any agent type)
+    for arg in &config.custom_args {
+        cmd.arg(arg);
+    }
+
+    // Generic: custom env vars
+    for (key, val) in &config.custom_env {
+        cmd.env(key, val);
     }
 }

@@ -165,7 +165,7 @@ export function NewSessionModal({
                   color: selectedType === st.id ? st.color : undefined,
                 }}
               >
-                <SessionTypeIcon icon={st.icon} className="text-base" />
+                <SessionTypeIcon id={st.id} icon={st.icon} className="text-base" />
                 <span className="text-slate-700">{st.name}</span>
               </button>
             ))}
@@ -187,7 +187,7 @@ export function NewSessionModal({
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. API Refactor"
           autoFocus
-          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+          className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
         />
       </div>
 
@@ -201,7 +201,7 @@ export function NewSessionModal({
             value={directory}
             onChange={(e) => setDirectory(e.target.value)}
             placeholder="/path/to/project"
-            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400"
+            className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400"
           />
           <button
             type="button"
@@ -234,7 +234,7 @@ export function NewSessionModal({
         <button
           type="submit"
           disabled={isSubmitting || enabledTypes.length === 0}
-          className="px-5 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-600 transition-colors disabled:opacity-50 shadow-md"
+          className="px-5 py-2 rounded-lg bg-violet-400 text-white text-sm font-medium hover:bg-violet-500 transition-colors disabled:opacity-50 shadow-md"
           style={{
             backgroundColor: currentType?.color ?? undefined,
           }}
@@ -257,7 +257,7 @@ export function NewSessionModal({
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Filter sessions..."
-        className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 placeholder:text-slate-400 mb-3"
+        className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white/60 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-slate-400 mb-3"
       />
       <div className="overflow-y-auto max-h-[400px] -mr-2 pr-2 space-y-1">
         {filteredSessions.length === 0 ? (

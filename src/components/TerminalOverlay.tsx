@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { TerminalPane } from "./TerminalPane";
+import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
 import { StatusDot } from "./StatusDot";
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
@@ -32,10 +32,12 @@ export function TerminalOverlay({
 }: TerminalOverlayProps) {
   const [activeTabId, setActiveTabId] = useState(session.id);
   const [showMenu, setShowMenu] = useState(false);
+  const lastEscapeRef = useRef(0);
+  const paneRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
 
   const allTabs = [session, ...companions];
   const activeSession = allTabs.find((t) => t.id === activeTabId) ?? session;
-  const isStopped = activeSession.status === "stopped";
+  const isStopped = activeSession.status === "stopped" || activeSession.status === "ready";
 
   // Reset to primary tab if active tab was removed
   useEffect(() => {
@@ -51,8 +53,14 @@ export function TerminalOverlay({
       if (e.key === "Escape") {
         if (showMenu) {
           setShowMenu(false);
-        } else {
+          return;
+        }
+        const now = Date.now();
+        if (now - lastEscapeRef.current < 400) {
           onClose();
+          lastEscapeRef.current = 0;
+        } else {
+          lastEscapeRef.current = now;
         }
         return;
       }
@@ -68,6 +76,12 @@ export function TerminalOverlay({
         if (activeTabId !== session.id) {
           onRemoveCompanion(activeTabId);
         }
+        return;
+      }
+
+      if (e.metaKey && e.key === "ArrowDown") {
+        e.preventDefault();
+        paneRefs.current.get(activeTabId)?.scrollToBottom();
         return;
       }
 
@@ -157,7 +171,7 @@ export function TerminalOverlay({
         transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 bg-[#181825] border-b border-slate-700/50">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-[#181825] border-b border-slate-700/50" onMouseDown={(e) => e.preventDefault()}>
           <div className="flex items-center gap-3">
             <StatusDot status={activeSession.status} size={8} />
             <span className="text-sm font-medium text-slate-200">
@@ -273,7 +287,7 @@ export function TerminalOverlay({
 
         {/* Tab bar — shown only when companions exist */}
         {hasCompanions && (
-          <div className="flex items-center bg-[#181825] border-b border-slate-700/50 px-2">
+          <div className="flex items-center bg-[#181825] border-b border-slate-700/50 px-2" onMouseDown={(e) => e.preventDefault()}>
             {allTabs.map((tab, idx) => {
               const isActive = tab.id === activeTabId;
               const isCompanion = tab.id !== session.id;
@@ -317,6 +331,13 @@ export function TerminalOverlay({
           {allTabs.map((tab) => (
             <TerminalPane
               key={tab.id}
+              ref={(handle) => {
+                if (handle) {
+                  paneRefs.current.set(tab.id, handle);
+                } else {
+                  paneRefs.current.delete(tab.id);
+                }
+              }}
               sessionId={tab.id}
               visible={tab.id === activeTabId && isOpen}
             />

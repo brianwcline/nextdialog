@@ -23,6 +23,24 @@ pub struct Settings {
     pub machine_id: String,
     #[serde(default)]
     pub telemetry_enabled: bool,
+    #[serde(default = "default_hooks_enabled")]
+    pub hooks_enabled: bool,
+    #[serde(default = "default_hook_port_start")]
+    pub hook_port_start: u16,
+    #[serde(default = "default_hook_port_end")]
+    pub hook_port_end: u16,
+}
+
+fn default_hooks_enabled() -> bool {
+    true
+}
+
+fn default_hook_port_start() -> u16 {
+    7432
+}
+
+fn default_hook_port_end() -> u16 {
+    7499
 }
 
 impl Default for Settings {
@@ -36,6 +54,9 @@ impl Default for Settings {
             intelligence_api_url: String::new(),
             machine_id: Uuid::new_v4().to_string(),
             telemetry_enabled: false,
+            hooks_enabled: true,
+            hook_port_start: 7432,
+            hook_port_end: 7499,
         }
     }
 }

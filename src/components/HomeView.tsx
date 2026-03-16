@@ -10,18 +10,12 @@ interface HomeViewProps {
   onOpenSettings: () => void;
   onOpenFeedback: () => void;
   sessionTypeMap?: Record<string, SessionType>;
-  companionCounts?: Record<string, number>;
   activeSessionId?: string | null;
 }
 
 function EmptyState({ onNewSession }: { onNewSession: () => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-      <img
-        src="/icons/nextdialog.png"
-        alt="NextDialog"
-        className="w-14 h-14 opacity-20"
-      />
       <p className="text-slate-500 text-center max-w-xs">
         No sessions yet. Create one to get started.
       </p>
@@ -43,7 +37,6 @@ export function HomeView({
   onOpenSettings,
   onOpenFeedback,
   sessionTypeMap = {},
-  companionCounts = {},
   activeSessionId = null,
 }: HomeViewProps) {
   const isTerminalOpen = activeSessionId !== null;
@@ -56,7 +49,6 @@ export function HomeView({
         onClick={() => onSelectSession(session.id)}
         onContextMenu={(e) => onSessionContextMenu(session.id, e)}
         sessionType={sessionTypeMap[session.session_type]}
-        companionCount={companionCounts[session.id] ?? 0}
       />
     ));
 
@@ -69,20 +61,8 @@ export function HomeView({
         animate={{ opacity: isTerminalOpen ? 0 : 1 }}
         transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
       >
-        {/* Center — logo, title, count */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <img src="/icons/nextdialog.png" alt="NextDialog" className="w-6 h-6 pointer-events-none" />
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight select-none">
-              NextDialog
-            </h1>
-          </div>
-          {sessions.length > 0 && (
-            <span className="text-xs bg-white/40 backdrop-blur-sm border border-white/40 shadow-sm rounded-full px-2.5 py-0.5 text-slate-600 font-medium select-none">
-              {sessions.length}
-            </span>
-          )}
-        </div>
+        {/* Center — intentionally empty for clean canvas */}
+        <div />
 
         {/* Right — actions (absolute so they don't shift the center) */}
         <div className="absolute right-6 flex items-center gap-1">

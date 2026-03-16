@@ -35,4 +35,7 @@ export const terminalOptions = {
   allowTransparency: false,
   scrollback: 10000,
   allowProposedApi: true,
+  fastScrollModifier: "alt" as const,
+  fastScrollSensitivity: 5,
+  smoothScrollDuration: 0,
 };
