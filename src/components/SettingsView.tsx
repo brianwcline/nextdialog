@@ -20,6 +20,8 @@ interface Settings {
   hooks_enabled: boolean;
   hook_port_start: number;
   hook_port_end: number;
+  background_mode: string;
+  background_image_path: string;
 }
 
 interface SettingsViewProps {
@@ -29,6 +31,8 @@ interface SettingsViewProps {
   onUpdateType?: (sessionType: SessionType) => Promise<unknown>;
   onCreateType?: (sessionType: SessionType) => Promise<unknown>;
   onDeleteType?: (id: string) => Promise<void>;
+  backgroundMode?: string;
+  onBackgroundChange?: (mode: string, imageUrl: string | null) => void;
 }
 
 export function SettingsView({
@@ -38,6 +42,8 @@ export function SettingsView({
   onUpdateType,
   onCreateType,
   onDeleteType,
+  backgroundMode = "gradient",
+  onBackgroundChange,
 }: SettingsViewProps) {
   const [settings, setSettings] = useState<Settings>({
     default_directory: "",
@@ -51,6 +57,8 @@ export function SettingsView({
     hooks_enabled: true,
     hook_port_start: 7432,
     hook_port_end: 7499,
+    background_mode: "gradient",
+    background_image_path: "",
   });
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -59,11 +67,22 @@ export function SettingsView({
   const [newCommand, setNewCommand] = useState("");
   const [newIcon, setNewIcon] = useState("");
   const [newColor, setNewColor] = useState("#6366f1");
+  const [bgPreviewUrl, setBgPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       invoke<Settings>("get_settings")
-        .then(setSettings)
+        .then((s) => {
+          setSettings(s);
+          // Load preview thumbnail if custom background is active
+          if (s.background_mode === "image" && s.background_image_path) {
+            invoke<string | null>("get_background_image_data").then((dataUrl) => {
+              setBgPreviewUrl(dataUrl ?? null);
+            });
+          } else {
+            setBgPreviewUrl(null);
+          }
+        })
         .catch(console.error);
       setShowAddForm(false);
     }
@@ -162,6 +181,73 @@ export function SettingsView({
                   >
                     Browse
                   </button>
+                </div>
+              </div>
+
+              {/* Appearance */}
+              <div className="border-t border-slate-200 pt-4">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                  Appearance
+                </h3>
+                <div className="flex items-center gap-3">
+                  {/* Preview thumbnail */}
+                  <div className="w-16 h-10 rounded-md overflow-hidden border border-slate-200 bg-gradient-to-br from-orange-100 via-rose-50 to-violet-100 shrink-0">
+                    {bgPreviewUrl && backgroundMode === "image" && (
+                      <img
+                        src={bgPreviewUrl}
+                        alt="Background preview"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const selected = await open({
+                          multiple: false,
+                          filters: [
+                            {
+                              name: "Images",
+                              extensions: ["jpg", "jpeg", "png", "webp"],
+                            },
+                          ],
+                        });
+                        if (selected) {
+                          try {
+                            const dataUrl = await invoke<string>(
+                              "import_background_image",
+                              { sourcePath: selected as string },
+                            );
+                            setBgPreviewUrl(dataUrl);
+                            onBackgroundChange?.("image", dataUrl);
+                          } catch (err) {
+                            console.error("Failed to import background:", err);
+                          }
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs hover:bg-slate-200 transition-colors"
+                    >
+                      Choose Image...
+                    </button>
+                    {backgroundMode === "image" && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await invoke("reset_background");
+                            setBgPreviewUrl(null);
+                            onBackgroundChange?.("gradient", null);
+                          } catch (err) {
+                            console.error("Failed to reset background:", err);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-slate-400 text-xs hover:text-slate-600 transition-colors"
+                      >
+                        Reset to Default
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

@@ -94,6 +94,9 @@ pub fn run() {
             commands::track_event,
             commands::flush_telemetry,
             commands::get_hook_status,
+            commands::import_background_image,
+            commands::reset_background,
+            commands::get_background_image_data,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

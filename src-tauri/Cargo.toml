@@ -30,6 +30,7 @@ chrono = { version = "0.4", features = ["serde"] }
 png = "0.17"
 reqwest = { version = "0.12", features = ["json", "blocking", "rustls-tls"] }
 tiny_http = "0.12"
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

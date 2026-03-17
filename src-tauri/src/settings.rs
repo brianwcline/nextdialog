@@ -29,6 +29,10 @@ pub struct Settings {
     pub hook_port_start: u16,
     #[serde(default = "default_hook_port_end")]
     pub hook_port_end: u16,
+    #[serde(default = "default_background_mode")]
+    pub background_mode: String,
+    #[serde(default)]
+    pub background_image_path: String,
 }
 
 fn default_hooks_enabled() -> bool {
@@ -41,6 +45,10 @@ fn default_hook_port_start() -> u16 {
 
 fn default_hook_port_end() -> u16 {
     7499
+}
+
+fn default_background_mode() -> String {
+    "gradient".to_string()
 }
 
 impl Default for Settings {
@@ -57,6 +65,8 @@ impl Default for Settings {
             hooks_enabled: true,
             hook_port_start: 7432,
             hook_port_end: 7499,
+            background_mode: "gradient".to_string(),
+            background_image_path: String::new(),
         }
     }
 }
