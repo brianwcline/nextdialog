@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef, Component, type Reac
 import { invoke } from "@tauri-apps/api/core";
 import type { Session } from "./lib/types";
 import { SessionProvider } from "./context/SessionContext";
-import { ShiftingGradient } from "./components/ShiftingGradient";
+import { AppBackground } from "./components/AppBackground";
 import { HomeView } from "./components/HomeView";
 import { NewSessionModal } from "./components/NewSessionModal";
 import { TerminalOverlay } from "./components/TerminalOverlay";
@@ -83,6 +83,33 @@ function AppContent() {
     }
     return map;
   }, [sessions]);
+
+  const [backgroundMode, setBackgroundMode] = useState("gradient");
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
+
+  // Load background settings on mount
+  useEffect(() => {
+    invoke<{ background_mode: string; background_image_path: string }>("get_settings")
+      .then((s) => {
+        setBackgroundMode(s.background_mode || "gradient");
+        if (s.background_mode === "image" && s.background_image_path) {
+          invoke<string | null>("get_background_image_data").then((dataUrl) => {
+            if (dataUrl) {
+              setBackgroundImageUrl(dataUrl);
+            } else {
+              // Image file was deleted — fall back to gradient
+              setBackgroundMode("gradient");
+            }
+          });
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const handleBackgroundChange = useCallback((mode: string, imageUrl: string | null) => {
+    setBackgroundMode(mode);
+    setBackgroundImageUrl(imageUrl);
+  }, []);
 
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>(() =>
     getRecentSessions(),
@@ -357,7 +384,11 @@ function AppContent() {
 
   return (
     <>
-      <ShiftingGradient sessionStatuses={sessions.map((s) => s.status)} />
+      <AppBackground
+        sessionStatuses={sessions.map((s) => s.status)}
+        backgroundMode={backgroundMode}
+        backgroundImageUrl={backgroundImageUrl}
+      />
       <HomeView
         sessions={activeSessions}
         onNewSession={() => setShowNewSession(true)}
@@ -400,6 +431,8 @@ function AppContent() {
         onUpdateType={updateType}
         onCreateType={createType}
         onDeleteType={deleteType}
+        backgroundMode={backgroundMode}
+        onBackgroundChange={handleBackgroundChange}
       />
       {spawnedIds.map((id) => {
         const session = sessions.find((s) => s.id === id);

@@ -1,3 +1,8 @@
+use std::fs;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use tauri::{AppHandle, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
@@ -327,6 +332,103 @@ pub fn track_event(
 #[tauri::command]
 pub fn flush_telemetry(telemetry: State<'_, TelemetryClient>) -> Result<(), String> {
     telemetry.flush()
+}
+
+// ── Background Image ──
+
+#[tauri::command]
+pub fn import_background_image(
+    settings_manager: State<'_, SettingsManager>,
+    source_path: String,
+) -> Result<String, String> {
+    let source = Path::new(&source_path);
+    if !source.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+
+    if !matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "webp") {
+        return Err("Unsupported image format. Use jpg, png, or webp.".to_string());
+    }
+
+    let bg_dir = dirs::home_dir()
+        .ok_or("Could not determine home directory")?
+        .join(".nextdialog")
+        .join("backgrounds");
+
+    fs::create_dir_all(&bg_dir).map_err(|e| format!("Failed to create backgrounds dir: {e}"))?;
+
+    // Delete previous background image if one exists
+    let current_settings = settings_manager.get();
+    if !current_settings.background_image_path.is_empty() {
+        let old_path = bg_dir.join(&current_settings.background_image_path);
+        let _ = fs::remove_file(old_path);
+    }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let filename = format!("background_{timestamp}.{ext}");
+    let dest = bg_dir.join(&filename);
+
+    fs::copy(source, &dest).map_err(|e| format!("Failed to copy image: {e}"))?;
+
+    let mut settings = current_settings;
+    settings.background_mode = "image".to_string();
+    settings.background_image_path = filename;
+    settings_manager.save(settings);
+
+    // Return as data URL so the frontend can display immediately
+    let data = fs::read(&dest).map_err(|e| format!("Failed to read copied image: {e}"))?;
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "webp" => "image/webp",
+        _ => "image/jpeg",
+    };
+    Ok(format!("data:{};base64,{}", mime, BASE64.encode(&data)))
+}
+
+#[tauri::command]
+pub fn reset_background(settings_manager: State<'_, SettingsManager>) {
+    let mut settings = settings_manager.get();
+    settings.background_mode = "gradient".to_string();
+    settings.background_image_path = String::new();
+    settings_manager.save(settings);
+}
+
+#[tauri::command]
+pub fn get_background_image_data(
+    settings_manager: State<'_, SettingsManager>,
+) -> Option<String> {
+    let settings = settings_manager.get();
+    if settings.background_mode != "image" || settings.background_image_path.is_empty() {
+        return None;
+    }
+    let path = dirs::home_dir()?
+        .join(".nextdialog")
+        .join("backgrounds")
+        .join(&settings.background_image_path);
+    if !path.exists() {
+        return None;
+    }
+    let data = fs::read(&path).ok()?;
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("jpeg")
+        .to_lowercase();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "webp" => "image/webp",
+        _ => "image/jpeg",
+    };
+    Some(format!("data:{};base64,{}", mime, BASE64.encode(&data)))
 }
 
 // ── Diagnostics ──

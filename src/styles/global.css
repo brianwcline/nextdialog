@@ -90,6 +90,12 @@ body,
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
+.background-scrim {
+  background: rgba(251, 245, 243, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 @keyframes breathe {
   from { transform: scale(1) rotate(0deg); }
   to { transform: scale(1.03) rotate(1deg); }
