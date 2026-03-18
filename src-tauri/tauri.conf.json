@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicepage/nicepage/master/assets/tauri.conf.json",
   "productName": "NextDialog",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "identifier": "com.nextdialog.app",
   "build": {
     "beforeDevCommand": "npm run dev",

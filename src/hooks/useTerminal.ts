@@ -172,24 +172,24 @@ export function useTerminal({
       invoke("write_to_pty", { id: sessionId, data }).catch(console.error);
     });
 
-    // Intercept Cmd+V for clipboard image paste
-    term.attachCustomKeyEventHandler((e) => {
-      if (e.type === "keydown" && e.key === "v" && e.metaKey) {
+    // Intercept paste to check for clipboard images first, then fall back to text
+    const textarea = term.textarea;
+    if (textarea) {
+      textarea.addEventListener("paste", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         invoke<boolean>("check_and_paste_clipboard_image", {
           id: sessionId,
         }).then((wasImage) => {
           if (!wasImage) {
-            navigator.clipboard.readText().then((text) => {
-              if (text) {
-                term.paste(text);
-              }
-            });
+            const text = e.clipboardData?.getData("text/plain");
+            if (text) {
+              term.paste(text);
+            }
           }
         });
-        return false;
-      }
-      return true;
-    });
+      });
+    }
 
     // Listen for PTY data — pending-write counter replaces boolean guard
     let unlistenData: UnlistenFn | null = null;
