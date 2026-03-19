@@ -7,6 +7,16 @@
 
 ---
 
+<p align="center">
+  <img src="docs/images/nextdialog-home.png" alt="NextDialog home screen — session cards with status indicators" width="720" />
+</p>
+
+<p align="center">
+  <img src="docs/images/nextdialog-session.png" alt="NextDialog session view — Claude Code running in an embedded terminal" width="720" />
+</p>
+
+---
+
 ## What it does
 
 - **Multi-session terminal management** — Run multiple AI coding agents side by side. Claude Code, Codex, Aider, Gemini CLI, or any terminal-based tool.
