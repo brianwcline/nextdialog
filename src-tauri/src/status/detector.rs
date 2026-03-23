@@ -74,7 +74,7 @@ impl StatusDetector {
             last_output_time: Instant::now(),
             line_buffer: String::new(),
             idle_re: get("idle", r"^[>❯]\s*$"),
-            waiting_re: get("waiting", r"\?\s*$|\(y/n\)|\(Y/n\)|\[Y/n\]|\[y/N\]"),
+            waiting_re: get("waiting", r"\?\s*$|\(y/n\)|\(Y/n\)|\[Y/n\]|\[y/N\]|Do you want to|Esc to cancel|Tab to amend|press Enter|allow once|allow always|deny"),
             planning_re: get("planning", r"(?i)plan mode"),
             context_re: Regex::new(r"(\d+(?:\.\d+)?)%\s*(?:of\s+)?context").unwrap(),
             plan_lines: Vec::new(),
