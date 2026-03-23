@@ -5,6 +5,8 @@ interface ContextMenuItem {
   label: string;
   onClick: () => void;
   variant?: "default" | "danger";
+  shortcut?: string;
+  dividerAfter?: boolean;
 }
 
 interface ContextMenuProps {
@@ -56,21 +58,28 @@ export function ContextMenu({
           className="fixed z-[100] min-w-[160px] rounded-lg bg-white/90 backdrop-blur-xl shadow-xl border border-slate-200/60 py-1 overflow-hidden"
           style={{ left: x, top: y }}
         >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => {
-                item.onClick();
-                onClose();
-              }}
-              className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
-                item.variant === "danger"
-                  ? "text-red-600 hover:bg-red-50"
-                  : "text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              {item.label}
-            </button>
+          {items.map((item, idx) => (
+            <div key={item.label}>
+              <button
+                onClick={() => {
+                  item.onClick();
+                  onClose();
+                }}
+                className={`w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center justify-between gap-4 ${
+                  item.variant === "danger"
+                    ? "text-red-600 hover:bg-red-50"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <span>{item.label}</span>
+                {item.shortcut && (
+                  <span className="text-xs text-slate-400 ml-auto">{item.shortcut}</span>
+                )}
+              </button>
+              {item.dividerAfter && idx < items.length - 1 && (
+                <div className="border-t border-slate-200/60 my-1" />
+              )}
+            </div>
           ))}
         </motion.div>
       )}
