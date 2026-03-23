@@ -352,12 +352,15 @@ function AppContent() {
         },
         {
           label: "Restart",
+          shortcut: "⌘R",
           onClick: () => handleRestartSession(contextMenu.id),
         },
         {
           label: sessions.find((s) => s.id === contextMenu.id)?.parked
             ? "Unpark"
             : "Park",
+          shortcut: "⌘P",
+          dividerAfter: true,
           onClick: () => {
             const s = sessions.find((s) => s.id === contextMenu.id);
             if (s?.parked) {
@@ -369,6 +372,8 @@ function AppContent() {
         },
         {
           label: "End Session",
+          shortcut: "⌘⇧E",
+          dividerAfter: true,
           onClick: () => handleEndSession(contextMenu.id),
         },
         {
@@ -452,6 +457,7 @@ function AppContent() {
             onEnd={handleEndSession}
             onRestart={handleRestartSession}
             onRemove={handleRemoveSession}
+            onPark={handleParkSession}
             onAddCompanion={handleAddCompanion}
             onRemoveCompanion={handleRemoveCompanion}
           />
