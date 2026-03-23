@@ -94,6 +94,7 @@ pub fn run() {
             commands::track_event,
             commands::flush_telemetry,
             commands::get_hook_status,
+            commands::check_binary_available,
             commands::import_background_image,
             commands::reset_background,
             commands::get_background_image_data,

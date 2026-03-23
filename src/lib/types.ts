@@ -61,4 +61,6 @@ export interface SessionType {
   builtin: boolean;
   enabled: boolean;
   agent_config: AgentConfig;
+  /** Runtime flag — true if the command binary exists on PATH. Set by useSessionTypes, not persisted. */
+  available?: boolean;
 }

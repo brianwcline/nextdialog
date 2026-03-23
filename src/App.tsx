@@ -128,17 +128,22 @@ function AppContent() {
   const spawningRef = useRef<Set<string>>(new Set());
 
   const handleSelectSession = useCallback(async (id: string) => {
-    setActiveSessionId(id);
-    trackEvent("session.focused", "session-management", undefined, id);
-    if (spawningRef.current.has(id)) return;
+    if (spawningRef.current.has(id)) {
+      // Already spawning — just focus
+      setActiveSessionId(id);
+      return;
+    }
     spawningRef.current.add(id);
     trackEvent("session.opened", "session-management", undefined, id);
     try {
       await invoke("spawn_pty_session", { id, rows: null, cols: null });
       setSpawnedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+      setActiveSessionId(id);
+      trackEvent("session.focused", "session-management", undefined, id);
     } catch (err) {
       console.error("Failed to spawn PTY:", err);
       spawningRef.current.delete(id);
+      // Don't set activeSessionId — prevents blank screen on spawn failure
     }
   }, []);
 

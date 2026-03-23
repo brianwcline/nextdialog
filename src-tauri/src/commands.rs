@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
 use crate::hooks::manager::HookManager;
@@ -185,6 +185,9 @@ pub fn restart_pty_session(
 
     // Teardown old hooks before restart
     hook_manager.teardown_session(&id);
+
+    // Signal frontend to clear the terminal buffer before new PTY output arrives
+    let _ = app_handle.emit(&format!("pty-restart-{id}"), ());
 
     pool.restart(
         &id,
@@ -446,6 +449,19 @@ pub fn get_hook_status(
     id: String,
 ) -> bool {
     hook_manager.is_active(&id)
+}
+
+// ── Binary Availability ──
+
+#[tauri::command]
+pub fn check_binary_available(command: String) -> bool {
+    // Extract just the binary name (first word) from multi-word commands like "openclaw tui"
+    let binary = command.split_whitespace().next().unwrap_or(&command);
+    std::process::Command::new("which")
+        .arg(binary)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 // ── Intelligence ──

@@ -231,8 +231,30 @@ export function useTerminal({
       unlistenData = fn;
     });
 
+    // Clear terminal when session is restarted (prevents cross-corruption)
+    let unlistenRestart: UnlistenFn | null = null;
+    listen(`pty-restart-${sessionId}`, () => {
+      term.clear();
+      term.reset();
+    }).then((fn) => {
+      unlistenRestart = fn;
+    });
+
+    const spawnTime = Date.now();
+
     listen(`pty-exit-${sessionId}`, () => {
-      term.write("\r\n\x1b[90m[Session ended]\x1b[0m\r\n");
+      const aliveMs = Date.now() - spawnTime;
+      if (aliveMs < 3000) {
+        // Process exited almost immediately — likely command not found or crash
+        term.write(
+          "\r\n\x1b[31m[Session exited immediately]\x1b[0m\r\n" +
+          "\x1b[90mThe process exited within " + Math.round(aliveMs / 1000) + "s of starting.\r\n" +
+          "This usually means the command was not found on your PATH.\r\n" +
+          "Check that the tool is installed and accessible from your shell.\x1b[0m\r\n",
+        );
+      } else {
+        term.write("\r\n\x1b[90m[Session ended]\x1b[0m\r\n");
+      }
     }).then((fn) => {
       unlistenExit = fn;
     });
@@ -240,7 +262,12 @@ export function useTerminal({
     return () => {
       unlistenData?.();
       unlistenExit?.();
-      term.dispose();
+      unlistenRestart?.();
+      try {
+        term.dispose();
+      } catch (err) {
+        console.warn("[useTerminal] dispose error (safe to ignore):", err);
+      }
       termRef.current = null;
       fitAddonRef.current = null;
       initRef.current = false;
