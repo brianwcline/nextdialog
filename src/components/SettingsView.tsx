@@ -272,6 +272,11 @@ export function SettingsView({
                             built-in
                           </span>
                         )}
+                        {st.available === false && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-400 shrink-0">
+                            not found
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {!st.builtin && onDeleteType && (

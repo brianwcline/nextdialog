@@ -8,7 +8,21 @@ export function useSessionTypes() {
   const load = useCallback(async () => {
     try {
       const types = await invoke<SessionType[]>("list_session_types");
-      setSessionTypes(types);
+
+      // Check which binaries are actually available on PATH
+      const availabilityChecks = await Promise.all(
+        types.map((t) =>
+          invoke<boolean>("check_binary_available", { command: t.command })
+            .catch(() => false),
+        ),
+      );
+
+      const typesWithAvailability = types.map((t, i) => ({
+        ...t,
+        available: availabilityChecks[i],
+      }));
+
+      setSessionTypes(typesWithAvailability);
     } catch (err) {
       console.error("Failed to load session types:", err);
     }

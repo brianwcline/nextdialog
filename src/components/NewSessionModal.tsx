@@ -59,7 +59,7 @@ export function NewSessionModal({
   sessionTypes = [],
 }: NewSessionModalProps) {
   const enabledTypes = useMemo(
-    () => sessionTypes.filter((t) => t.enabled),
+    () => sessionTypes.filter((t) => t.enabled && t.available !== false),
     [sessionTypes],
   );
 
