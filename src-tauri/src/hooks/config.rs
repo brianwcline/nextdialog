@@ -63,17 +63,8 @@ pub fn inject_hook_config(working_dir: &str, port: u16) -> Result<(), String> {
             .as_array_mut()
             .ok_or(format!("{event_type} is not an array"))?;
 
-        // Remove any existing nextDialog-managed entries
-        matchers_arr.retain(|matcher| {
-            let hooks = matcher.get("hooks").and_then(|h| h.as_array());
-            if let Some(hooks) = hooks {
-                !hooks
-                    .iter()
-                    .any(|h| h.get("_nextdialog_managed").and_then(|v| v.as_bool()) == Some(true))
-            } else {
-                true
-            }
-        });
+        // Remove any existing entries managed by THIS port (not other sessions)
+        matchers_arr.retain(|matcher| !is_managed_by_port(matcher, port));
 
         // Add our managed entry
         matchers_arr.push(managed_matcher);
@@ -89,7 +80,9 @@ pub fn inject_hook_config(working_dir: &str, port: u16) -> Result<(), String> {
 }
 
 /// Remove nextDialog-managed hook entries from `.claude/settings.local.json`.
-pub fn remove_hook_config(working_dir: &str) -> Result<(), String> {
+/// If `port` is Some, only removes entries for that specific port (normal teardown).
+/// If `port` is None, removes ALL managed entries (crash recovery at startup).
+pub fn remove_hook_config(working_dir: &str, port: Option<u16>) -> Result<(), String> {
     let settings_path = claude_settings_path(working_dir);
 
     if !settings_path.exists() {
@@ -106,16 +99,9 @@ pub fn remove_hook_config(working_dir: &str) -> Result<(), String> {
         if let Some(hooks_map) = hooks_obj.as_object_mut() {
             for (_event_type, matchers) in hooks_map.iter_mut() {
                 if let Some(arr) = matchers.as_array_mut() {
-                    arr.retain(|matcher| {
-                        let hooks = matcher.get("hooks").and_then(|h| h.as_array());
-                        if let Some(hooks) = hooks {
-                            !hooks.iter().any(|h| {
-                                h.get("_nextdialog_managed").and_then(|v| v.as_bool())
-                                    == Some(true)
-                            })
-                        } else {
-                            true
-                        }
+                    arr.retain(|matcher| match port {
+                        Some(p) => !is_managed_by_port(matcher, p),
+                        None => !is_managed(matcher),
                     });
                 }
             }
@@ -143,6 +129,41 @@ pub fn remove_hook_config(working_dir: &str) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Check if a matcher has a managed hook targeting a specific port.
+fn is_managed_by_port(matcher: &serde_json::Value, port: u16) -> bool {
+    let prefix = format!("http://127.0.0.1:{port}/hook/");
+    matcher
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .map(|hooks| {
+            hooks.iter().any(|h| {
+                h.get("_nextdialog_managed")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+                    && h.get("url")
+                        .and_then(|u| u.as_str())
+                        .map(|u| u.starts_with(&prefix))
+                        .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+/// Check if a matcher has any managed hook (any port). Used for crash recovery.
+fn is_managed(matcher: &serde_json::Value) -> bool {
+    matcher
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .map(|hooks| {
+            hooks.iter().any(|h| {
+                h.get("_nextdialog_managed")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn claude_settings_path(working_dir: &str) -> PathBuf {
@@ -214,7 +235,7 @@ mod tests {
         let dir = tmp.path().to_str().unwrap();
 
         inject_hook_config(dir, 7432).unwrap();
-        remove_hook_config(dir).unwrap();
+        remove_hook_config(dir, Some(7432)).unwrap();
 
         let path = claude_settings_path(dir);
         // File should be removed since it was entirely managed
@@ -245,11 +266,103 @@ mod tests {
             );
         fs::write(&path, serde_json::to_string_pretty(&data).unwrap()).unwrap();
 
-        remove_hook_config(dir).unwrap();
+        remove_hook_config(dir, Some(7432)).unwrap();
 
         let data: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let post_tool = data["hooks"]["PostToolUse"].as_array().unwrap();
         assert_eq!(post_tool.len(), 1); // Only user hook remains
+    }
+
+    #[test]
+    fn two_sessions_coexist_in_same_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+        inject_hook_config(dir, 7433).unwrap();
+
+        let path = claude_settings_path(dir);
+        let data: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let post_tool = data["hooks"]["PostToolUse"].as_array().unwrap();
+        assert_eq!(post_tool.len(), 2);
+
+        let urls: Vec<&str> = post_tool
+            .iter()
+            .map(|m| m["hooks"][0]["url"].as_str().unwrap())
+            .collect();
+        assert!(urls.contains(&"http://127.0.0.1:7432/hook/PostToolUse"));
+        assert!(urls.contains(&"http://127.0.0.1:7433/hook/PostToolUse"));
+    }
+
+    #[test]
+    fn remove_one_session_preserves_other() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+        inject_hook_config(dir, 7433).unwrap();
+        remove_hook_config(dir, Some(7432)).unwrap();
+
+        let path = claude_settings_path(dir);
+        let data: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let post_tool = data["hooks"]["PostToolUse"].as_array().unwrap();
+        assert_eq!(post_tool.len(), 1);
+        let url = post_tool[0]["hooks"][0]["url"].as_str().unwrap();
+        assert_eq!(url, "http://127.0.0.1:7433/hook/PostToolUse");
+    }
+
+    #[test]
+    fn remove_all_managed_for_crash_recovery() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+        inject_hook_config(dir, 7433).unwrap();
+        remove_hook_config(dir, None).unwrap();
+
+        let path = claude_settings_path(dir);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn three_sessions_teardown_in_any_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+        inject_hook_config(dir, 7433).unwrap();
+        inject_hook_config(dir, 7434).unwrap();
+
+        // Tear down middle one first
+        remove_hook_config(dir, Some(7433)).unwrap();
+
+        let path = claude_settings_path(dir);
+        let data: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let post_tool = data["hooks"]["PostToolUse"].as_array().unwrap();
+        assert_eq!(post_tool.len(), 2);
+
+        // Tear down remaining in reverse order
+        remove_hook_config(dir, Some(7434)).unwrap();
+        remove_hook_config(dir, Some(7432)).unwrap();
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn reinject_same_port_is_idempotent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+        inject_hook_config(dir, 7432).unwrap();
+
+        let path = claude_settings_path(dir);
+        let data: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let post_tool = data["hooks"]["PostToolUse"].as_array().unwrap();
+        assert_eq!(post_tool.len(), 1);
     }
 }
