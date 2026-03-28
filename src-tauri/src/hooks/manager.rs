@@ -64,7 +64,7 @@ impl HookManager {
             }
             Err(e) => {
                 eprintln!("[hooks] Failed to start server for session {session_id}: {e}");
-                let _ = config::remove_hook_config(working_dir);
+                let _ = config::remove_hook_config(working_dir, Some(port));
                 self.port_pool.release(port);
                 Ok(false)
             }
@@ -78,7 +78,7 @@ impl HookManager {
         if let Some(mut session) = removed {
             let port = session.server.port();
             session.server.stop_and_wait();
-            if let Err(e) = config::remove_hook_config(&session.working_dir) {
+            if let Err(e) = config::remove_hook_config(&session.working_dir, Some(port)) {
                 eprintln!("[hooks] Failed to clean config for session {session_id}: {e}");
             }
             self.port_pool.release(port);
@@ -90,7 +90,7 @@ impl HookManager {
     /// Runs against the filesystem only — no active servers to stop.
     pub fn cleanup_stale_hooks(working_dirs: &[String]) {
         for dir in working_dirs {
-            match config::remove_hook_config(dir) {
+            match config::remove_hook_config(dir, None) {
                 Ok(()) => eprintln!("[hooks] Cleaned stale hooks from {dir}"),
                 Err(e) => eprintln!("[hooks] Failed to clean stale hooks from {dir}: {e}"),
             }

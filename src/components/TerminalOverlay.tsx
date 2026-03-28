@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
+import { SessionTimeline } from "./SessionTimeline";
 import { StatusDot } from "./StatusDot";
+import { trackEvent } from "../lib/telemetry";
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
 
@@ -34,6 +36,7 @@ export function TerminalOverlay({
 }: TerminalOverlayProps) {
   const [activeTabId, setActiveTabId] = useState(session.id);
   const [showMenu, setShowMenu] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const paneRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
 
   const allTabs = [session, ...companions];
@@ -45,12 +48,27 @@ export function TerminalOverlay({
     }
   }, [allTabs, activeTabId, session.id]);
 
+  // Close timeline when overlay closes
+  useEffect(() => {
+    if (!isOpen) setTimelineOpen(false);
+  }, [isOpen]);
+
+  // Track timeline usage
+  useEffect(() => {
+    if (timelineOpen) {
+      trackEvent("timeline.opened", "timeline", undefined, activeSession.id);
+    }
+  }, [timelineOpen, activeSession.id]);
+
   // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      // Escape only closes the actions menu — never the overlay
       if (e.key === "Escape") {
+        if (timelineOpen) {
+          setTimelineOpen(false);
+          return;
+        }
         if (showMenu) {
           setShowMenu(false);
         }
@@ -82,6 +100,13 @@ export function TerminalOverlay({
       if (e.metaKey && e.shiftKey && e.key === "E") {
         e.preventDefault();
         onEnd(session.id);
+        return;
+      }
+
+      // ⌘. → toggle timeline
+      if (e.metaKey && e.key === ".") {
+        e.preventDefault();
+        setTimelineOpen((v) => !v);
         return;
       }
 
@@ -117,7 +142,7 @@ export function TerminalOverlay({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose, onRestart, onPark, onEnd, showMenu, session, companions, activeTabId, onAddCompanion, onRemoveCompanion]);
+  }, [isOpen, onClose, onRestart, onPark, onEnd, showMenu, timelineOpen, session, companions, activeTabId, onAddCompanion, onRemoveCompanion]);
 
   // Drag-drop file handling — writes to active tab
   useEffect(() => {
@@ -158,6 +183,7 @@ export function TerminalOverlay({
   );
 
   const hasCompanions = companions.length > 0;
+  const showTimelineButton = activeSession.hookEnabled !== false && activeSession.session_type !== "terminal";
 
   return (
     <motion.div
@@ -190,7 +216,7 @@ export function TerminalOverlay({
         transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2.5 bg-[#181825] border-b border-slate-700/50" onMouseDown={(e) => e.preventDefault()}>
+        <div className="flex items-center justify-between px-3 py-2.5 bg-[#181825] border-b border-slate-700/50 relative z-20" onMouseDown={(e) => e.preventDefault()}>
           <div className="flex items-center gap-3">
             {/* Back arrow — return to home */}
             <button
@@ -212,6 +238,21 @@ export function TerminalOverlay({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Catch me up button */}
+            {showTimelineButton && (
+              <button
+                onClick={() => setTimelineOpen((v) => !v)}
+                className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                  timelineOpen
+                    ? "text-slate-200 bg-slate-700/50"
+                    : "text-slate-500 hover:text-slate-300 hover:bg-slate-700/50"
+                }`}
+                title="Catch me up (⌘.)"
+              >
+                Catch me up
+              </button>
+            )}
+
             {/* + Terminal link (when no companions yet) */}
             {!hasCompanions && (
               <button
@@ -293,7 +334,7 @@ export function TerminalOverlay({
 
         {/* Tab bar — shown only when companions exist */}
         {hasCompanions && (
-          <div className="flex items-center bg-[#181825] border-b border-slate-700/50 px-2" onMouseDown={(e) => e.preventDefault()}>
+          <div className="flex items-center bg-[#181825] border-b border-slate-700/50 px-2 relative z-20" onMouseDown={(e) => e.preventDefault()}>
             {allTabs.map((tab, idx) => {
               const isActive = tab.id === activeTabId;
               const isCompanion = tab.id !== session.id;
@@ -332,8 +373,9 @@ export function TerminalOverlay({
           </div>
         )}
 
-        {/* Terminal panes — all mounted, only active visible */}
-        <div className="flex-1 flex flex-col min-h-0">
+        {/* Terminal panes + timeline overlay container */}
+        <div className="flex-1 flex flex-col min-h-0 relative">
+          {/* Terminal panes — all mounted, only active visible */}
           {allTabs.map((tab) => (
             <TerminalPane
               key={tab.id}
@@ -348,6 +390,41 @@ export function TerminalOverlay({
               visible={tab.id === activeTabId && isOpen}
             />
           ))}
+
+          {/* Timeline pull-down overlay — slides down over terminal */}
+          <AnimatePresence>
+            {timelineOpen && (
+              <>
+                {/* Dim layer over terminal — captures clicks to dismiss, blocks terminal interaction */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
+                  className="absolute inset-0 bg-black/50 z-10 backdrop-blur-[2px] pointer-events-auto"
+                  onClick={() => setTimelineOpen(false)}
+                />
+
+                {/* Timeline content — slides down from top, fades on exit */}
+                <motion.div
+                  initial={{ y: "-100%", opacity: 0.5 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: "-100%", opacity: 0 }}
+                  transition={{
+                    y: { duration: 0.4, ease: [0.25, 0.8, 0.25, 1] },
+                    opacity: { duration: 0.25, ease: "easeOut" },
+                  }}
+                  className="absolute inset-x-0 top-0 z-20 h-[75%] overflow-hidden rounded-b-2xl"
+                >
+                  <SessionTimeline
+                    sessionId={activeSession.id}
+                    isOpen={timelineOpen}
+                    onDismiss={() => setTimelineOpen(false)}
+                  />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </motion.div>
     </motion.div>

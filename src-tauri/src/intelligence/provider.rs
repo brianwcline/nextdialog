@@ -1,19 +1,34 @@
 use serde_json::json;
 
-pub fn call_llm(
+const ANNOTATION_SYSTEM_PROMPT: &str =
+    "Summarize what this terminal session just did in 5-10 words. Be specific. Reply with only the summary.";
+
+/// Call LLM for a short annotation (5-10 word summary).
+pub fn call_annotation(
     client: &reqwest::blocking::Client,
     provider: &str,
     api_key: &str,
     api_url: &str,
     prompt: &str,
 ) -> Result<String, String> {
-    let system = "Summarize what this terminal session just did in 5-10 words. Be specific. Reply with only the summary.";
+    call_llm(client, provider, api_key, api_url, ANNOTATION_SYSTEM_PROMPT, prompt, 30)
+}
 
+/// Call LLM with custom system prompt and max tokens.
+pub fn call_llm(
+    client: &reqwest::blocking::Client,
+    provider: &str,
+    api_key: &str,
+    api_url: &str,
+    system_prompt: &str,
+    prompt: &str,
+    max_tokens: u32,
+) -> Result<String, String> {
     match provider {
-        "anthropic" => call_anthropic(client, api_key, system, prompt),
-        "openai" => call_openai(client, api_key, system, prompt),
-        "gemini" => call_gemini(client, api_key, system, prompt),
-        "ollama" => call_ollama(client, api_url, system, prompt),
+        "anthropic" => call_anthropic(client, api_key, system_prompt, prompt, max_tokens),
+        "openai" => call_openai(client, api_key, system_prompt, prompt, max_tokens),
+        "gemini" => call_gemini(client, api_key, system_prompt, prompt, max_tokens),
+        "ollama" => call_ollama(client, api_url, system_prompt, prompt, max_tokens),
         _ => Err(format!("Unknown provider: {provider}")),
     }
 }
@@ -23,10 +38,11 @@ fn call_anthropic(
     api_key: &str,
     system: &str,
     prompt: &str,
+    max_tokens: u32,
 ) -> Result<String, String> {
     let body = json!({
         "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 30,
+        "max_tokens": max_tokens,
         "system": system,
         "messages": [{"role": "user", "content": prompt}]
     });
@@ -53,10 +69,11 @@ fn call_openai(
     api_key: &str,
     system: &str,
     prompt: &str,
+    max_tokens: u32,
 ) -> Result<String, String> {
     let body = json!({
         "model": "gpt-4o-mini",
-        "max_tokens": 30,
+        "max_tokens": max_tokens,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt}
@@ -84,11 +101,12 @@ fn call_gemini(
     api_key: &str,
     system: &str,
     prompt: &str,
+    max_tokens: u32,
 ) -> Result<String, String> {
     let body = json!({
         "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": 30}
+        "generationConfig": {"maxOutputTokens": max_tokens}
     });
 
     let url = format!(
@@ -115,6 +133,7 @@ fn call_ollama(
     api_url: &str,
     system: &str,
     prompt: &str,
+    max_tokens: u32,
 ) -> Result<String, String> {
     let base = if api_url.is_empty() {
         "http://localhost:11434"
@@ -129,7 +148,7 @@ fn call_ollama(
             {"role": "user", "content": prompt}
         ],
         "stream": false,
-        "options": {"num_predict": 30}
+        "options": {"num_predict": max_tokens}
     });
 
     let resp = client

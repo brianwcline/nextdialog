@@ -81,7 +81,7 @@ impl IntelligenceManager {
         let prompt_text = preview_lines.join("\n");
 
         std::thread::spawn(move || {
-            let result = provider::call_llm(&client, &provider, &api_key, &api_url, &prompt_text);
+            let result = provider::call_annotation(&client, &provider, &api_key, &api_url, &prompt_text);
 
             match result {
                 Ok(text) => {
@@ -106,5 +106,32 @@ impl IntelligenceManager {
 
     pub fn clear_annotation(&self, id: &str) {
         self.annotations.lock().unwrap().remove(id);
+    }
+
+    /// Synchronously summarize timeline entries for "catch me up" feature.
+    /// No cooldown or inflight guard — this is user-initiated.
+    pub fn summarize_sync(
+        &self,
+        settings_manager: &SettingsManager,
+        entries_text: &str,
+    ) -> Result<String, String> {
+        let settings = settings_manager.get();
+
+        if !settings.intelligence_enabled || settings.intelligence_api_key.is_empty() {
+            return Err("Intelligence is not configured. Enable it in Settings to use Catch Me Up.".to_string());
+        }
+
+        let system = "You are summarizing what happened in a coding session. Given recent actions, provide a 2-3 sentence catch-me-up summary. Be specific about what was worked on. Focus on outcomes, not process. Reply with only the summary.";
+
+        provider::call_llm(
+            &self.client,
+            &settings.intelligence_provider,
+            &settings.intelligence_api_key,
+            &settings.intelligence_api_url,
+            system,
+            entries_text,
+            150,
+        )
+        .map(|s| s.trim().to_string())
     }
 }

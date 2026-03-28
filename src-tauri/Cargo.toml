@@ -1,6 +1,6 @@
 [package]
 name = "nextdialog"
-version = "0.2.6"
+version = "0.2.7"
 description = "Multi-session Claude Code terminal manager"
 authors = ["Brian Cline"]
 edition = "2021"

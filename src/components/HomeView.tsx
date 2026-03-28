@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
+import { invoke } from "@tauri-apps/api/core";
 import type { Session, SessionType } from "../lib/types";
 import { SessionCard } from "./SessionCard";
+import { useUpdateCheck } from "../hooks/useUpdateCheck";
 
 interface HomeViewProps {
   sessions: Session[];
@@ -39,6 +41,7 @@ export function HomeView({
   sessionTypeMap = {},
   activeSessionId = null,
 }: HomeViewProps) {
+  const { update } = useUpdateCheck();
   const isTerminalOpen = activeSessionId !== null;
   const renderCards = (cards: Session[], startIndex: number) =>
     cards.map((session, i) => (
@@ -66,6 +69,15 @@ export function HomeView({
 
         {/* Right — actions (absolute so they don't shift the center) */}
         <div className="absolute right-6 flex items-center gap-1">
+          {update && (
+            <button
+              onClick={() => invoke("plugin:opener|open_url", { url: update.downloadUrl }).catch(() => {})}
+              className="px-2.5 py-1.5 rounded-lg text-xs text-indigo-500 hover:bg-indigo-50/50 hover:text-indigo-600 transition-colors"
+              title={`Update available: v${update.latestVersion} (current: v${update.currentVersion})`}
+            >
+              v{update.latestVersion} available
+            </button>
+          )}
           <button
             onClick={onOpenFeedback}
             className="px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-white/40 hover:text-slate-700 transition-colors"

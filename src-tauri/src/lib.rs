@@ -7,6 +7,7 @@ mod settings;
 mod intelligence;
 mod status;
 mod telemetry;
+mod timeline;
 
 use tauri::Manager;
 
@@ -18,6 +19,7 @@ use session::types::SessionTypeManager;
 use intelligence::IntelligenceManager;
 use settings::SettingsManager;
 use telemetry::TelemetryClient;
+use timeline::ledger::TimelineLedger;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -39,6 +41,7 @@ pub fn run() {
         .manage(IntelligenceManager::new())
         .manage(HookManager::new())
         .manage(telemetry_client)
+        .manage(TimelineLedger::new())
         .setup(|app| {
             // Clean stale hooks from any previous crash/force-quit
             let sessions = app.state::<SessionManager>();
@@ -98,6 +101,8 @@ pub fn run() {
             commands::import_background_image,
             commands::reset_background,
             commands::get_background_image_data,
+            commands::get_timeline_entries,
+            commands::catch_me_up,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
