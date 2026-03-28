@@ -518,16 +518,11 @@ fn detect_user_prompt(line: &str) -> Option<String> {
     let trimmed = line.trim();
 
     // Match Claude Code prompt patterns: ❯, ›, or >  followed by user text
-    let text = if let Some(rest) = trimmed.strip_prefix('❯') {
-        Some(rest.trim())
-    } else if let Some(rest) = trimmed.strip_prefix('›') {
-        Some(rest.trim())
-    } else if let Some(rest) = trimmed.strip_prefix("> ") {
-        // Only "> " with space to avoid matching markdown blockquotes
-        Some(rest.trim())
-    } else {
-        None
-    };
+    let text = trimmed
+        .strip_prefix('❯')
+        .or_else(|| trimmed.strip_prefix('›'))
+        .or_else(|| trimmed.strip_prefix("> "))
+        .map(|rest| rest.trim());
 
     match text {
         Some(t) if t.len() >= 5 => {
