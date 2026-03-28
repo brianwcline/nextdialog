@@ -204,8 +204,20 @@ impl PtyPool {
                             let stripped = strip_ansi_escapes::strip(&buf[..n]);
                             let text = String::from_utf8_lossy(&stripped);
                             let mut pv = preview.lock().unwrap();
+                            // Split on \n, then handle \r within each line
+                            // (terminals use \r to overwrite — keep only text after last \r)
                             for line in text.split('\n') {
-                                let trimmed = line.trim();
+                                // Handle carriage returns: keep only the last segment
+                                let line = if line.contains('\r') {
+                                    line.rsplit('\r').next().unwrap_or(line)
+                                } else {
+                                    line
+                                };
+                                // Strip remaining control characters
+                                let cleaned: String = line.chars()
+                                    .filter(|c| !c.is_control() || *c == ' ')
+                                    .collect();
+                                let trimmed = cleaned.trim();
                                 if trimmed.is_empty() {
                                     continue;
                                 }
@@ -217,12 +229,16 @@ impl PtyPool {
                                 if alpha_count < 3 {
                                     continue;
                                 }
-                                // Skip Claude Code status bar lines
+                                // Skip Claude Code status bar / UI chrome lines
                                 if trimmed.starts_with("connected |")
                                     || (trimmed.starts_with("agent ")
                                         && trimmed.contains("| session ")
                                         && trimmed.contains("| tokens "))
                                 {
+                                    continue;
+                                }
+                                // Skip Claude Code spinner/progress lines
+                                if is_claude_spinner_line(trimmed) {
                                     continue;
                                 }
                                 let capped = if trimmed.len() > 200 {
@@ -478,6 +494,49 @@ impl PtyPool {
 
         self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
     }
+}
+
+/// Detect Claude Code animated spinner/progress/status lines that pollute preview.
+fn is_claude_spinner_line(line: &str) -> bool {
+    // Claude Code uses cooking-themed verbs as spinners: "Sautéed for 1m 30s", "Hashing…"
+    // Also status mode lines: "plan mode on", "bypass permissions on"
+    let lower = line.to_lowercase();
+
+    // Spinner verbs (Claude Code's animated status)
+    if lower.ends_with('…')
+        || lower.ends_with("...")
+    {
+        // "Hashing…", "Pontificating…", "Catapulting…", "Cooking…"
+        let word_count = line.split_whitespace().count();
+        if word_count <= 3 {
+            return true;
+        }
+    }
+
+    // Duration lines: "Sautéed for 1m 30s", "Cooked for 2m 10s"
+    if (lower.contains(" for ") && (lower.contains("m ") || lower.contains("s")))
+        && lower.split_whitespace().count() <= 5
+    {
+        let has_duration = lower.chars().any(|c| c.is_ascii_digit());
+        if has_duration {
+            return true;
+        }
+    }
+
+    // Mode indicator lines
+    if lower.starts_with("plan mode")
+        || lower.starts_with("bypass permissions")
+        || lower.starts_with("auto-accept")
+        || lower.contains("shift+tab to cycle")
+        || lower.contains("esc to interrupt")
+        || lower.contains("esc to cancel")
+        || lower.contains("ctrl+o to expand")
+        || lower.contains("Image in clipboard")
+    {
+        return true;
+    }
+
+    false
 }
 
 /// Translate AgentConfig fields into CLI arguments and env vars on the command.

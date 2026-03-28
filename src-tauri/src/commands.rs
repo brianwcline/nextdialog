@@ -15,6 +15,7 @@ use crate::session::types::{SessionType, SessionTypeManager};
 use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
 use crate::telemetry::TelemetryClient;
+use crate::timeline::ledger::{TimelineEntry, TimelineLedger};
 
 // ── Session CRUD ──
 
@@ -46,10 +47,11 @@ pub fn create_session(
 pub fn remove_session(
     manager: State<'_, SessionManager>,
     hook_manager: State<'_, HookManager>,
+    ledger: State<'_, TimelineLedger>,
     id: String,
 ) -> Result<(), String> {
-    // Teardown hooks before removing — no-op if hooks aren't active
     hook_manager.teardown_session(&id);
+    ledger.clear(&id);
     manager.remove(&id)
 }
 
@@ -472,4 +474,40 @@ pub fn get_session_annotation(
     id: String,
 ) -> Option<String> {
     intelligence.get_annotation(&id)
+}
+
+// ── Timeline ──
+
+#[tauri::command]
+pub fn get_timeline_entries(
+    ledger: State<'_, TimelineLedger>,
+    id: String,
+    count: Option<usize>,
+) -> Vec<TimelineEntry> {
+    ledger.read_last(&id, count.unwrap_or(50))
+}
+
+#[tauri::command]
+pub fn catch_me_up(
+    ledger: State<'_, TimelineLedger>,
+    intelligence: State<'_, IntelligenceManager>,
+    settings_manager: State<'_, SettingsManager>,
+    id: String,
+) -> Result<String, String> {
+    let entries = ledger.read_last(&id, 20);
+    if entries.is_empty() {
+        return Ok("No activity recorded yet for this session.".to_string());
+    }
+
+    let entries_text = entries
+        .iter()
+        .map(|e| {
+            let time = e.timestamp.split('T').next_back().unwrap_or(&e.timestamp);
+            let time_short = &time[..std::cmp::min(8, time.len())];
+            format!("[{}] {}", time_short, e.summary)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    intelligence.summarize_sync(&settings_manager, &entries_text)
 }

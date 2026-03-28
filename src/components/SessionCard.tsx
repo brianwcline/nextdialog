@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { listen } from "@tauri-apps/api/event";
-import type { Session, SessionType } from "../lib/types";
+import type { Session, SessionType, TimelineEntry } from "../lib/types";
 import { StatusDot } from "./StatusDot";
 import { TokenBurnBar } from "./TokenBurnBar";
 import { SessionTypeIcon } from "./SessionTypeIcon";
@@ -34,6 +34,7 @@ export function SessionCard({
 }: SessionCardProps) {
   const [contextUsage, setContextUsage] = useState<number | null>(null);
   const [annotation, setAnnotation] = useState<string | null>(null);
+  const [lastTimelineEvent, setLastTimelineEvent] = useState<string | null>(null);
 
   const brandColor = sessionType?.color;
 
@@ -53,6 +54,17 @@ export function SessionCard({
     let cleanup: (() => void) | undefined;
     listen<string>(`session-annotation-${session.id}`, (event) => {
       setAnnotation(event.payload || null);
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    });
+    return () => cleanup?.();
+  }, [session.id]);
+
+  // Listen for timeline events (for "last action" preview)
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    listen<TimelineEntry>(`session-timeline-${session.id}`, (event) => {
+      setLastTimelineEvent(event.payload.summary);
     }).then((unlisten) => {
       cleanup = unlisten;
     });
@@ -116,10 +128,10 @@ export function SessionCard({
         </p>
       )}
 
-      {/* Last tool use indicator */}
-      {session.lastToolUse && session.status === "working" && (
+      {/* Last timeline event */}
+      {lastTimelineEvent && (
         <p className="text-[11px] text-slate-400/70 font-mono truncate mt-1">
-          {session.lastToolUse}
+          {lastTimelineEvent}
         </p>
       )}
 

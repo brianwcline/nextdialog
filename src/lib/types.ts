@@ -25,6 +25,22 @@ export interface Session {
   hookNotification?: string;
 }
 
+export interface TimelineEntry {
+  timestamp: string;
+  event_type: string;
+  summary: string;
+  details?: Record<string, unknown>;
+}
+
+export interface GroupedTimelineEntry {
+  id: string;
+  timestamp: string;
+  event_type: string;
+  summary: string;
+  count: number;
+  entries: TimelineEntry[];
+}
+
 export interface AgentConfig {
   permission_mode?: string;
   allowed_tools: string[];
