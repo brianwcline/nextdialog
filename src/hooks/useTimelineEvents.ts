@@ -68,10 +68,14 @@ function buildGroupSummary(entries: TimelineEntry[]): string {
 function groupEntries(raw: TimelineEntry[]): GroupedTimelineEntry[] {
   const groups: GroupedTimelineEntry[] = [];
 
+  // Types that should never be grouped — they're turn boundaries
+  const NEVER_GROUP = new Set(["user_input", "status", "notification", "lifecycle"]);
+
   for (const entry of raw) {
     const last = groups[groups.length - 1];
     if (
       last &&
+      !NEVER_GROUP.has(entry.event_type) &&
       last.event_type === entry.event_type &&
       last.count < MAX_GROUP_SIZE &&
       Math.abs(

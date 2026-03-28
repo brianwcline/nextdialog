@@ -254,6 +254,22 @@ impl PtyPool {
                                     pv.pop_front();
                                 }
                                 pv.push_back(capped.to_string());
+
+                                // Detect user input prompts (❯ or › followed by text)
+                                let prompt_text = detect_user_prompt(capped);
+                                if let Some(input) = prompt_text {
+                                    if let Some(ledger) = handle.try_state::<crate::timeline::ledger::TimelineLedger>() {
+                                        let entry = crate::timeline::ledger::TimelineEntry::new(
+                                            "user_input",
+                                            &input,
+                                        );
+                                        ledger.append(&session_id, &entry);
+                                        let _ = handle.emit(
+                                            &format!("session-timeline-{session_id}"),
+                                            &entry,
+                                        );
+                                    }
+                                }
                             }
                         }
 
@@ -493,6 +509,33 @@ impl PtyPool {
         };
 
         self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
+    }
+}
+
+/// Detect user input at the Claude Code prompt.
+/// Claude Code shows user input as "❯ text" or "› text" or "> text" after submission.
+fn detect_user_prompt(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+
+    // Match Claude Code prompt patterns: ❯, ›, or >  followed by user text
+    let text = if let Some(rest) = trimmed.strip_prefix('❯') {
+        Some(rest.trim())
+    } else if let Some(rest) = trimmed.strip_prefix('›') {
+        Some(rest.trim())
+    } else if let Some(rest) = trimmed.strip_prefix("> ") {
+        // Only "> " with space to avoid matching markdown blockquotes
+        Some(rest.trim())
+    } else {
+        None
+    };
+
+    match text {
+        Some(t) if t.len() >= 5 => {
+            // Cap at 200 chars
+            let capped = if t.len() > 200 { &t[..200] } else { t };
+            Some(capped.to_string())
+        }
+        _ => None,
     }
 }
 

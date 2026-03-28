@@ -5,6 +5,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
 import { SessionTimeline } from "./SessionTimeline";
 import { StatusDot } from "./StatusDot";
+import { trackEvent } from "../lib/telemetry";
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
 
@@ -51,6 +52,13 @@ export function TerminalOverlay({
   useEffect(() => {
     if (!isOpen) setTimelineOpen(false);
   }, [isOpen]);
+
+  // Track timeline usage
+  useEffect(() => {
+    if (timelineOpen) {
+      trackEvent("timeline.opened", "timeline", undefined, activeSession.id);
+    }
+  }, [timelineOpen, activeSession.id]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -387,23 +395,26 @@ export function TerminalOverlay({
           <AnimatePresence>
             {timelineOpen && (
               <>
-                {/* Dim layer over terminal — click to dismiss */}
+                {/* Dim layer over terminal — captures clicks to dismiss, blocks terminal interaction */}
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3, ease: [0.25, 0.8, 0.25, 1] }}
-                  className="absolute inset-0 bg-black/40 z-10"
+                  transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
+                  className="absolute inset-0 bg-black/50 z-10 backdrop-blur-[2px] pointer-events-auto"
                   onClick={() => setTimelineOpen(false)}
                 />
 
-                {/* Timeline content — slides down from top */}
+                {/* Timeline content — slides down from top, fades on exit */}
                 <motion.div
-                  initial={{ y: "-100%" }}
-                  animate={{ y: 0 }}
-                  exit={{ y: "-100%" }}
-                  transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-                  className="absolute inset-x-0 top-0 z-20 h-[75%] overflow-hidden"
+                  initial={{ y: "-100%", opacity: 0.5 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: "-100%", opacity: 0 }}
+                  transition={{
+                    y: { duration: 0.4, ease: [0.25, 0.8, 0.25, 1] },
+                    opacity: { duration: 0.25, ease: "easeOut" },
+                  }}
+                  className="absolute inset-x-0 top-0 z-20 h-[75%] overflow-hidden rounded-b-2xl"
                 >
                   <SessionTimeline
                     sessionId={activeSession.id}

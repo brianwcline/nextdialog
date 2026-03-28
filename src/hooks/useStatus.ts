@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
+// OS notifications disabled — revisiting in a future release
+// import {
+//   isPermissionGranted,
+//   requestPermission,
+//   sendNotification,
+// } from "@tauri-apps/plugin-notification";
 import { useSessionContext } from "../context/SessionContext";
 import type { SessionStatus } from "../lib/types";
 import { playChime, playAlert, playTone } from "../lib/sounds";
@@ -17,7 +18,7 @@ interface SoundSettings {
 
 export function useStatus(sessionIds: string[]) {
   const { sessions, dispatch } = useSessionContext();
-  const notifPermissionRef = useRef<boolean | null>(null);
+  // const notifPermissionRef = useRef<boolean | null>(null);
   const soundSettingsRef = useRef<SoundSettings>({
     sounds_enabled: false,
     sound_volume: 0.5,
@@ -25,18 +26,18 @@ export function useStatus(sessionIds: string[]) {
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
-  // Check notification permission on mount
-  useEffect(() => {
-    isPermissionGranted().then((granted) => {
-      if (granted) {
-        notifPermissionRef.current = true;
-      } else {
-        requestPermission().then((perm) => {
-          notifPermissionRef.current = perm === "granted";
-        });
-      }
-    });
-  }, []);
+  // OS notifications disabled — revisiting in a future release
+  // useEffect(() => {
+  //   isPermissionGranted().then((granted) => {
+  //     if (granted) {
+  //       notifPermissionRef.current = true;
+  //     } else {
+  //       requestPermission().then((perm) => {
+  //         notifPermissionRef.current = perm === "granted";
+  //       });
+  //     }
+  //   });
+  // }, []);
 
   // Load sound settings
   useEffect(() => {
@@ -64,14 +65,14 @@ export function useStatus(sessionIds: string[]) {
 
         dispatch({ type: "UPDATE_STATUS", id, status: newStatus });
 
-        // Fire notification on "waiting" transition
-        if (newStatus === "waiting" && notifPermissionRef.current) {
-          const session = sessionsRef.current.find((s) => s.id === id);
-          sendNotification({
-            title: "NextDialog",
-            body: `${session?.name ?? "Session"} is waiting for input`,
-          });
-        }
+        // OS notifications disabled — revisiting in a future release
+        // if (newStatus === "waiting" && notifPermissionRef.current) {
+        //   const session = sessionsRef.current.find((s) => s.id === id);
+        //   sendNotification({
+        //     title: "NextDialog",
+        //     body: `${session?.name ?? "Session"} is waiting for input`,
+        //   });
+        // }
 
         // Play sounds on status transitions
         if (
