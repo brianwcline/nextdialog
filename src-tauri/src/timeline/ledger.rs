@@ -75,6 +75,12 @@ impl TimelineLedger {
 
     /// Read the last `count` entries from a session's timeline.
     pub fn read_last(&self, session_id: &str, count: usize) -> Vec<TimelineEntry> {
+        self.read_range(session_id, count, 0)
+    }
+
+    /// Read `count` entries ending `offset` entries from the end.
+    /// offset=0 means the most recent entries, offset=50 skips the 50 newest.
+    pub fn read_range(&self, session_id: &str, count: usize, offset: usize) -> Vec<TimelineEntry> {
         let path = self.session_path(session_id);
 
         let file = match fs::File::open(&path) {
@@ -91,8 +97,9 @@ impl TimelineLedger {
             })
             .collect();
 
-        let start = entries.len().saturating_sub(count);
-        entries[start..].to_vec()
+        let end = entries.len().saturating_sub(offset);
+        let start = end.saturating_sub(count);
+        entries[start..end].to_vec()
     }
 
     /// Trim a session's timeline to keep only the last `keep` entries.

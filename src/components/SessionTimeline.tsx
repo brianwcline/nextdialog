@@ -1,3 +1,4 @@
+import { useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useTimelineEvents } from "../hooks/useTimelineEvents";
 import type { GroupedTimelineEntry } from "../lib/types";
@@ -161,10 +162,21 @@ export function SessionTimeline({
   isOpen,
   onDismiss,
 }: SessionTimelineProps) {
-  const { entries, loading } = useTimelineEvents(sessionId, isOpen);
+  const { entries, loading, loadingMore, hasMore, loadMore } = useTimelineEvents(sessionId, isOpen);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const reversedEntries = [...entries].reverse();
   const turns = splitIntoTurns(reversedEntries);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || loadingMore || !hasMore) return;
+    // Trigger load when within 100px of the bottom (oldest entries, since list is reversed)
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 100) {
+      loadMore();
+    }
+  }, [loadMore, loadingMore, hasMore]);
 
   return (
     <div className="flex flex-col h-full bg-[#181825] relative">
@@ -192,7 +204,7 @@ export function SessionTimeline({
       </div>
 
       {/* Timeline turns — scrollable, newest at top */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto scrollbar-thin">
         {loading && entries.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-xs text-slate-600">Loading timeline...</p>
@@ -214,6 +226,16 @@ export function SessionTimeline({
                 isFirst={i === 0}
               />
             ))}
+            {loadingMore && (
+              <div className="flex justify-center py-4">
+                <span className="text-[11px] text-slate-600">Loading older events...</span>
+              </div>
+            )}
+            {!hasMore && entries.length > 0 && (
+              <div className="flex justify-center py-4">
+                <span className="text-[10px] text-slate-700">Beginning of timeline</span>
+              </div>
+            )}
           </div>
         )}
       </div>

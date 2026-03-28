@@ -483,8 +483,9 @@ pub fn get_timeline_entries(
     ledger: State<'_, TimelineLedger>,
     id: String,
     count: Option<usize>,
+    offset: Option<usize>,
 ) -> Vec<TimelineEntry> {
-    ledger.read_last(&id, count.unwrap_or(50))
+    ledger.read_range(&id, count.unwrap_or(50), offset.unwrap_or(0))
 }
 
 #[tauri::command]

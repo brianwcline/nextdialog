@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { TimelineEntry, GroupedTimelineEntry } from "../lib/types";
 
 const GROUP_WINDOW_MS = 10_000;
 const MAX_GROUP_SIZE = 20;
+const PAGE_SIZE = 50;
 
 /**
  * Build a meaningful summary for a group of entries instead of "Used N tools".
@@ -105,7 +106,10 @@ function groupEntries(raw: TimelineEntry[]): GroupedTimelineEntry[] {
 export function useTimelineEvents(sessionId: string, isOpen: boolean) {
   const [rawEntries, setRawEntries] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const loadedRef = useRef(false);
+  const totalLoadedRef = useRef(0);
 
   // Load historical entries on first open
   useEffect(() => {
@@ -114,16 +118,44 @@ export function useTimelineEvents(sessionId: string, isOpen: boolean) {
 
     invoke<TimelineEntry[]>("get_timeline_entries", {
       id: sessionId,
-      count: 50,
+      count: PAGE_SIZE,
     })
       .then((entries) => {
         setRawEntries(entries);
+        totalLoadedRef.current = entries.length;
+        setHasMore(entries.length >= PAGE_SIZE);
         setLoading(false);
       })
       .catch(() => {
         setLoading(false);
       });
   }, [sessionId, isOpen]);
+
+  // Load older entries (infinite scroll)
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+
+    invoke<TimelineEntry[]>("get_timeline_entries", {
+      id: sessionId,
+      count: PAGE_SIZE,
+      offset: totalLoadedRef.current,
+    })
+      .then((olderEntries) => {
+        if (olderEntries.length === 0) {
+          setHasMore(false);
+        } else {
+          // Prepend older entries before the existing ones
+          setRawEntries((prev) => [...olderEntries, ...prev]);
+          totalLoadedRef.current += olderEntries.length;
+          setHasMore(olderEntries.length >= PAGE_SIZE);
+        }
+        setLoadingMore(false);
+      })
+      .catch(() => {
+        setLoadingMore(false);
+      });
+  }, [sessionId, loadingMore, hasMore]);
 
   // Subscribe to real-time timeline events
   useEffect(() => {
@@ -134,7 +166,8 @@ export function useTimelineEvents(sessionId: string, isOpen: boolean) {
       `session-timeline-${sessionId}`,
       (event) => {
         if (cancelled) return;
-        setRawEntries((prev) => [...prev.slice(-99), event.payload]);
+        setRawEntries((prev) => [...prev, event.payload]);
+        totalLoadedRef.current += 1;
       },
     ).then((unlisten) => {
       if (cancelled) {
@@ -152,5 +185,5 @@ export function useTimelineEvents(sessionId: string, isOpen: boolean) {
 
   const entries = groupEntries(rawEntries);
 
-  return { entries, loading };
+  return { entries, loading, loadingMore, hasMore, loadMore };
 }
