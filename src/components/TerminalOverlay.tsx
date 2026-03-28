@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -36,6 +37,8 @@ export function TerminalOverlay({
 }: TerminalOverlayProps) {
   const [activeTabId, setActiveTabId] = useState(session.id);
   const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const paneRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
 
@@ -59,6 +62,21 @@ export function TerminalOverlay({
       trackEvent("timeline.opened", "timeline", undefined, activeSession.id);
     }
   }, [timelineOpen, activeSession.id]);
+
+  // Compute menu position from button ref when menu opens, and dismiss on outside click
+  useEffect(() => {
+    if (showMenu && menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 180 });
+
+      const onClickOutside = (e: MouseEvent) => {
+        if (menuBtnRef.current?.contains(e.target as Node)) return;
+        setShowMenu(false);
+      };
+      window.addEventListener("mousedown", onClickOutside);
+      return () => window.removeEventListener("mousedown", onClickOutside);
+    }
+  }, [showMenu]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -267,67 +285,73 @@ export function TerminalOverlay({
             {/* Actions menu */}
             <div className="relative">
               <button
+                ref={menuBtnRef}
                 onClick={() => setShowMenu((v) => !v)}
                 className="px-2 py-1 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors text-sm"
                 title="Session actions"
               >
                 ⋯
               </button>
-              <AnimatePresence>
-                {showMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.2, ease: [0.25, 0.8, 0.25, 1] }}
-                  className="absolute right-0 top-full mt-1 min-w-[180px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1 z-10"
-                >
-                  {/* Safe actions */}
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onRestart(session.id);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
+              {/* Portal to body so it escapes overflow-hidden on the terminal window */}
+              {createPortal(
+                <AnimatePresence>
+                  {showMenu && menuPos && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2, ease: [0.25, 0.8, 0.25, 1] }}
+                    className="fixed min-w-[180px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1 z-[200]"
+                    style={{ top: menuPos.top, left: menuPos.left }}
                   >
-                    <span>Restart</span>
-                    <span className="text-[10px] text-slate-500">⌘R</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onPark(session.id);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
-                  >
-                    <span>Park</span>
-                    <span className="text-[10px] text-slate-500">⌘P</span>
-                  </button>
-                  <div className="border-t border-slate-600/50 my-1" />
-                  {/* Dangerous actions */}
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onEnd(session.id);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
-                  >
-                    <span>End Session</span>
-                    <span className="text-[10px] text-slate-500">⌘⇧E</span>
-                  </button>
-                  <div className="border-t border-slate-600/50 my-1" />
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      onRemove(session.id);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/30 transition-colors"
-                  >
-                    Remove
-                  </button>
-                </motion.div>
+                    {/* Safe actions */}
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onRestart(session.id);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
+                    >
+                      <span>Restart</span>
+                      <span className="text-[10px] text-slate-500">⌘R</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onPark(session.id);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
+                    >
+                      <span>Park</span>
+                      <span className="text-[10px] text-slate-500">⌘P</span>
+                    </button>
+                    <div className="border-t border-slate-600/50 my-1" />
+                    {/* Dangerous actions */}
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onEnd(session.id);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
+                    >
+                      <span>End Session</span>
+                      <span className="text-[10px] text-slate-500">⌘⇧E</span>
+                    </button>
+                    <div className="border-t border-slate-600/50 my-1" />
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onRemove(session.id);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/30 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </motion.div>
+                )}
+                </AnimatePresence>,
+                document.body
               )}
-              </AnimatePresence>
             </div>
           </div>
         </div>
