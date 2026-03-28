@@ -87,7 +87,7 @@ export function SessionCard({
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className="relative w-[280px] h-[280px] rounded-[2rem] glass-card cursor-pointer text-left px-7 py-7 flex flex-col overflow-hidden group"
+      className="relative w-[280px] h-[280px] rounded-[2rem] glass-card cursor-pointer text-left px-7 py-7 flex flex-col overflow-hidden group min-w-0"
     >
       {/* Status dot — top left */}
       <div className="flex items-center gap-2 mb-4">
