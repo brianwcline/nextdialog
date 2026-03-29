@@ -257,7 +257,7 @@ export function SettingsView({
                   Session Types
                 </h3>
                 <div className="space-y-2">
-                  {sessionTypes.map((st) => (
+                  {[...sessionTypes].sort((a, b) => a.name.localeCompare(b.name)).map((st) => (
                     <div
                       key={st.id}
                       className="flex items-center justify-between py-2 px-3 rounded-lg bg-white/40"

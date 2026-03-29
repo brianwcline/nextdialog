@@ -201,7 +201,7 @@ export function TerminalOverlay({
   );
 
   const hasCompanions = companions.length > 0;
-  const showTimelineButton = activeSession.hookEnabled !== false && activeSession.session_type !== "terminal";
+  const showTimelineButton = activeSession.session_type !== "terminal";
 
   return (
     <motion.div

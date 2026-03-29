@@ -85,30 +85,17 @@ fn builtin_types() -> Vec<SessionType> {
             agent_config: AgentConfig::default(),
         },
         SessionType {
-            id: "aider".to_string(),
-            name: "Aider".to_string(),
-            command: "aider".to_string(),
+            id: "cursor-agent".to_string(),
+            name: "Cursor Agent".to_string(),
+            command: "agent".to_string(),
             args: vec![],
-            icon: "/icons/aider.svg".to_string(),
-            color: "#10b981".to_string(),
+            icon: "/icons/cursor.svg".to_string(),
+            color: "#0ea5e9".to_string(),
             env: HashMap::new(),
             status_patterns: HashMap::from([
                 ("idle".to_string(), r"^>\s*$".to_string()),
                 ("waiting".to_string(), r"\?\s*$|\(y/n\)".to_string()),
             ]),
-            builtin: true,
-            enabled: true,
-            agent_config: AgentConfig::default(),
-        },
-        SessionType {
-            id: "codex-cli".to_string(),
-            name: "Codex CLI".to_string(),
-            command: "codex".to_string(),
-            args: vec![],
-            icon: "/icons/openai.svg".to_string(),
-            color: "#0ea5e9".to_string(),
-            env: HashMap::new(),
-            status_patterns: HashMap::new(),
             builtin: true,
             enabled: true,
             agent_config: AgentConfig::default(),
@@ -177,8 +164,11 @@ impl SessionTypeManager {
         let types = if storage_path.exists() {
             let data = fs::read_to_string(&storage_path).unwrap_or_default();
             let mut saved: Vec<SessionType> = serde_json::from_str(&data).unwrap_or_default();
-            // Ensure all builtins exist (merge)
+            // Sync builtins: add new, update existing, remove stale
             let builtins = builtin_types();
+            let builtin_ids: Vec<&str> = builtins.iter().map(|b| b.id.as_str()).collect();
+            // Remove saved builtins that are no longer in the builtin list
+            saved.retain(|t| !t.builtin || builtin_ids.contains(&t.id.as_str()));
             for builtin in &builtins {
                 if let Some(existing) = saved.iter_mut().find(|t| t.id == builtin.id) {
                     // Update builtin fields but preserve user's enabled state and config

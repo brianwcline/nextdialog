@@ -1,3 +1,4 @@
+mod agents;
 mod clipboard;
 mod commands;
 mod hooks;

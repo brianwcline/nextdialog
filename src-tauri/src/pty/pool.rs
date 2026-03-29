@@ -6,6 +6,7 @@ use std::time::Duration;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::agents::{self, AgentAdapter};
 use crate::intelligence::IntelligenceManager;
 use crate::pty::activity::ActivityTracker;
 use crate::settings::SettingsManager;
@@ -22,6 +23,7 @@ struct PtySession {
 pub struct PtyPool {
     sessions: Mutex<HashMap<String, PtySession>>,
     detectors: Arc<Mutex<HashMap<String, Arc<Mutex<StatusDetector>>>>>,
+    adapters: Arc<Mutex<HashMap<String, Arc<Box<dyn AgentAdapter>>>>>,
     preview_lines: Arc<Mutex<HashMap<String, Arc<Mutex<VecDeque<String>>>>>>,
     activity_trackers: Arc<Mutex<HashMap<String, Arc<Mutex<ActivityTracker>>>>>,
     app_handle: Mutex<Option<AppHandle>>,
@@ -35,6 +37,7 @@ impl PtyPool {
         Self {
             sessions: Mutex::new(HashMap::new()),
             detectors,
+            adapters: Arc::new(Mutex::new(HashMap::new())),
             preview_lines: Arc::new(Mutex::new(HashMap::new())),
             activity_trackers: Arc::new(Mutex::new(HashMap::new())),
             app_handle: Mutex::new(None),
@@ -75,6 +78,7 @@ impl PtyPool {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn spawn_inner(
         &self,
         id: &str,
@@ -83,6 +87,7 @@ impl PtyPool {
         cols: u16,
         app_handle: &AppHandle,
         status_patterns: Option<&HashMap<String, String>>,
+        adapter: Box<dyn AgentAdapter>,
     ) -> Result<(), String> {
         self.ensure_silence_checker(app_handle);
         let pty_system = native_pty_system();
@@ -134,6 +139,13 @@ impl PtyPool {
             .unwrap()
             .insert(id.to_string(), activity.clone());
 
+        // Store adapter for this session (accessible by hook manager)
+        let adapter = Arc::new(adapter);
+        self.adapters
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), adapter.clone());
+
         // Reader thread — OS thread, not tokio
         let session_id = id.to_string();
         let handle = app_handle.clone();
@@ -141,6 +153,8 @@ impl PtyPool {
             let mut buf = [0u8; 4096];
             // Carry-over buffer for incomplete UTF-8 sequences split across reads
             let mut pending = Vec::new();
+            // Track last detected prompt to debounce keystroke-by-keystroke TUI redraws
+            let mut last_prompt: Option<String> = None;
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
@@ -229,16 +243,8 @@ impl PtyPool {
                                 if alpha_count < 3 {
                                     continue;
                                 }
-                                // Skip Claude Code status bar / UI chrome lines
-                                if trimmed.starts_with("connected |")
-                                    || (trimmed.starts_with("agent ")
-                                        && trimmed.contains("| session ")
-                                        && trimmed.contains("| tokens "))
-                                {
-                                    continue;
-                                }
-                                // Skip Claude Code spinner/progress lines
-                                if is_claude_spinner_line(trimmed) {
+                                // Skip agent-specific UI chrome/noise
+                                if adapter.is_noise(trimmed) {
                                     continue;
                                 }
                                 let capped = if trimmed.len() > 200 {
@@ -255,19 +261,62 @@ impl PtyPool {
                                 }
                                 pv.push_back(capped.to_string());
 
-                                // Detect user input prompts (❯ or › followed by text)
-                                let prompt_text = detect_user_prompt(capped);
-                                if let Some(input) = prompt_text {
+                                // Detect user input prompts via agent adapter.
+                                // Debounce: TUI agents redraw the prompt line on each
+                                // keystroke. Only emit when the new prompt is NOT a
+                                // prefix of the previous one (meaning a new prompt, not
+                                // the same one being typed character by character).
+                                if let Some(input) = adapter.detect_prompt(capped) {
+                                    let is_typing = last_prompt.as_ref().is_some_and(|prev| {
+                                        prev.starts_with(&input) || input.starts_with(prev)
+                                    });
+                                    if is_typing {
+                                        // Still typing — update the tracked prompt but don't emit
+                                        last_prompt = Some(input);
+                                    } else {
+                                        // New prompt — emit the previous one (if any) and start tracking
+                                        if let Some(prev) = last_prompt.take() {
+                                            if let Some(ledger) = handle.try_state::<crate::timeline::ledger::TimelineLedger>() {
+                                                let entry = crate::timeline::ledger::TimelineEntry::new(
+                                                    "user_input",
+                                                    &prev,
+                                                );
+                                                ledger.append(&session_id, &entry);
+                                                let _ = handle.emit(
+                                                    &format!("session-timeline-{session_id}"),
+                                                    &entry,
+                                                );
+                                            }
+                                        }
+                                        last_prompt = Some(input);
+                                    }
+                                } else if let Some(prev) = last_prompt.take() {
+                                    // Non-prompt line after a prompt — the user submitted.
+                                    // Emit the final prompt text.
                                     if let Some(ledger) = handle.try_state::<crate::timeline::ledger::TimelineLedger>() {
                                         let entry = crate::timeline::ledger::TimelineEntry::new(
                                             "user_input",
-                                            &input,
+                                            &prev,
                                         );
                                         ledger.append(&session_id, &entry);
                                         let _ = handle.emit(
                                             &format!("session-timeline-{session_id}"),
                                             &entry,
                                         );
+                                    }
+                                }
+
+                                // Extract timeline entries from PTY output via adapter
+                                let timeline_entries = adapter.extract_timeline(capped);
+                                if !timeline_entries.is_empty() {
+                                    if let Some(ledger) = handle.try_state::<crate::timeline::ledger::TimelineLedger>() {
+                                        for entry in timeline_entries {
+                                            ledger.append(&session_id, &entry);
+                                            let _ = handle.emit(
+                                                &format!("session-timeline-{session_id}"),
+                                                &entry,
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -379,7 +428,14 @@ impl PtyPool {
             Some(&session_type.status_patterns)
         };
 
-        self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
+        let adapter = agents::create_adapter(&session_type.id);
+        self.spawn_inner(id, cmd, rows, cols, app_handle, patterns, adapter)
+    }
+
+    /// Get the adapter for a session (for use by hook manager).
+    #[allow(dead_code)]
+    pub fn get_adapter(&self, id: &str) -> Option<Arc<Box<dyn AgentAdapter>>> {
+        self.adapters.lock().unwrap().get(id).cloned()
     }
 
     pub fn write(&self, id: &str, data: &[u8]) -> Result<(), String> {
@@ -451,6 +507,7 @@ impl PtyPool {
                 .map_err(|e| format!("Kill failed: {e}"))?;
         }
         self.detectors.lock().unwrap().remove(id);
+        self.adapters.lock().unwrap().remove(id);
         self.preview_lines.lock().unwrap().remove(id);
         self.activity_trackers.lock().unwrap().remove(id);
         Ok(())
@@ -508,73 +565,9 @@ impl PtyPool {
             Some(&session_type.status_patterns)
         };
 
-        self.spawn_inner(id, cmd, rows, cols, app_handle, patterns)
+        let adapter = agents::create_adapter(&session_type.id);
+        self.spawn_inner(id, cmd, rows, cols, app_handle, patterns, adapter)
     }
-}
-
-/// Detect user input at the Claude Code prompt.
-/// Claude Code shows user input as "❯ text" or "› text" or "> text" after submission.
-fn detect_user_prompt(line: &str) -> Option<String> {
-    let trimmed = line.trim();
-
-    // Match Claude Code prompt patterns: ❯, ›, or >  followed by user text
-    let text = trimmed
-        .strip_prefix('❯')
-        .or_else(|| trimmed.strip_prefix('›'))
-        .or_else(|| trimmed.strip_prefix("> "))
-        .map(|rest| rest.trim());
-
-    match text {
-        Some(t) if t.len() >= 5 => {
-            // Cap at 200 chars
-            let capped = if t.len() > 200 { &t[..200] } else { t };
-            Some(capped.to_string())
-        }
-        _ => None,
-    }
-}
-
-/// Detect Claude Code animated spinner/progress/status lines that pollute preview.
-fn is_claude_spinner_line(line: &str) -> bool {
-    // Claude Code uses cooking-themed verbs as spinners: "Sautéed for 1m 30s", "Hashing…"
-    // Also status mode lines: "plan mode on", "bypass permissions on"
-    let lower = line.to_lowercase();
-
-    // Spinner verbs (Claude Code's animated status)
-    if lower.ends_with('…')
-        || lower.ends_with("...")
-    {
-        // "Hashing…", "Pontificating…", "Catapulting…", "Cooking…"
-        let word_count = line.split_whitespace().count();
-        if word_count <= 3 {
-            return true;
-        }
-    }
-
-    // Duration lines: "Sautéed for 1m 30s", "Cooked for 2m 10s"
-    if (lower.contains(" for ") && (lower.contains("m ") || lower.contains("s")))
-        && lower.split_whitespace().count() <= 5
-    {
-        let has_duration = lower.chars().any(|c| c.is_ascii_digit());
-        if has_duration {
-            return true;
-        }
-    }
-
-    // Mode indicator lines
-    if lower.starts_with("plan mode")
-        || lower.starts_with("bypass permissions")
-        || lower.starts_with("auto-accept")
-        || lower.contains("shift+tab to cycle")
-        || lower.contains("esc to interrupt")
-        || lower.contains("esc to cancel")
-        || lower.contains("ctrl+o to expand")
-        || lower.contains("Image in clipboard")
-    {
-        return true;
-    }
-
-    false
 }
 
 /// Translate AgentConfig fields into CLI arguments and env vars on the command.

@@ -1,14 +1,12 @@
 import claudeCodeSvg from "../assets/agent-icons/claude-code.svg?raw";
-import codexSvg from "../assets/agent-icons/codex.svg?raw";
+import cursorSvg from "../assets/agent-icons/cursor.svg?raw";
 import geminiSvg from "../assets/agent-icons/gemini.svg?raw";
 import terminalSvg from "../assets/agent-icons/terminal.svg?raw";
-import aiderSvg from "../assets/agent-icons/aider.svg?raw";
 const SVG_ICONS: Record<string, string> = {
   "claude-code": claudeCodeSvg,
-  "codex-cli": codexSvg,
+  "cursor-agent": cursorSvg,
   "gemini-cli": geminiSvg,
   terminal: terminalSvg,
-  aider: aiderSvg,
 };
 
 interface SessionTypeIconProps {
