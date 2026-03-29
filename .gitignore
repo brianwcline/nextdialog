@@ -28,6 +28,10 @@ src-tauri/.cargo/config.toml
 
 # Claude Code local config
 .claude/
+CLAUDE.md
+
+# Shared types (local dev only, published to npm separately)
+packages/
 
 # Internal docs / separate projects
 docs/internal/
