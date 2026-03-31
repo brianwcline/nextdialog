@@ -106,6 +106,10 @@ pub fn run() {
             commands::catch_me_up,
             commands::update_session_tuning,
             commands::get_session_tuning,
+            commands::install_tuning_files,
+            commands::uninstall_tuning_file,
+            commands::uninstall_all_tuning_files,
+            commands::get_tuning_install_status,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

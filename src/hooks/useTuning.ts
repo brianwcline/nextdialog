@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { defaultSessionTuning } from "../lib/types";
-import type { SessionTuning, AgentConfigOverrides, HookEntry, PermissionRules } from "../lib/types";
+import type { SessionTuning, AgentConfigOverrides, HookEntry, PermissionRules, FileConfig } from "../lib/types";
 
 export function useTuning(sessionId: string) {
   const [tuning, setTuning] = useState<SessionTuning | null>(null);
@@ -68,6 +68,16 @@ export function useTuning(sessionId: string) {
     [tuning, saveTuning],
   );
 
+  // Update file configs
+  const updateFileConfigs = useCallback(
+    async (files: FileConfig[]) => {
+      const current = tuning ?? { ...defaultSessionTuning };
+      const merged: SessionTuning = { ...current, file_configs: files };
+      await saveTuning(merged);
+    },
+    [tuning, saveTuning],
+  );
+
   // Clear all tuning
   const clearTuning = useCallback(async () => {
     await saveTuning(null);
@@ -92,6 +102,7 @@ export function useTuning(sessionId: string) {
     updateStartupCommands,
     updateHooks,
     updatePermissions,
+    updateFileConfigs,
     clearTuning,
   };
 }

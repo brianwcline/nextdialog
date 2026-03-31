@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useTuning } from "../hooks/useTuning";
 import { HooksSection } from "./tuning/HooksSection";
 import { PermissionsSection } from "./tuning/PermissionsSection";
+import { FileConfigsSection, getFileKindsForAgent } from "./tuning/FileConfigsSection";
 import type { AgentConfigOverrides } from "../lib/types";
 
 interface TuningPanelProps {
@@ -17,7 +18,7 @@ const PERMISSION_OPTIONS = ["default", "plan", "acceptEdits", "dontAsk", "bypass
 const THINKING_OPTIONS = ["enabled", "adaptive", "disabled"];
 
 export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: TuningPanelProps) {
-  const { tuning, loading, hasTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, clearTuning } = useTuning(sessionId);
+  const { tuning, loading, hasTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, updateFileConfigs, clearTuning } = useTuning(sessionId);
   const [newCommand, setNewCommand] = useState("");
   const [dirty, setDirty] = useState(false);
 
@@ -25,8 +26,10 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
   const startupCommands = tuning?.startup_commands ?? [];
   const hooksConfig = tuning?.hooks_config ?? [];
   const permissionRules = tuning?.permission_rules ?? { allow: [], deny: [] };
+  const fileConfigs = tuning?.file_configs ?? [];
 
   const isClaude = sessionType === "claude-code";
+  const hasFileKinds = getFileKindsForAgent(sessionType).length > 0;
   const isCursor = sessionType === "cursor-agent";
 
   const handleOverride = useCallback(
@@ -201,6 +204,18 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
             <PermissionsSection
               rules={permissionRules}
               onUpdate={(rules) => { updatePermissions(rules); setDirty(true); }}
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* File Configs (agent-aware) */}
+        {hasFileKinds && (
+          <CollapsibleSection title="Files" defaultOpen={fileConfigs.length > 0}>
+            <FileConfigsSection
+              sessionId={sessionId}
+              sessionType={sessionType}
+              files={fileConfigs}
+              onUpdate={(files) => { updateFileConfigs(files); setDirty(true); }}
             />
           </CollapsibleSection>
         )}

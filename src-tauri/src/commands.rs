@@ -12,6 +12,7 @@ use crate::session::config::{CreateSessionRequest, SessionConfig};
 use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
 use crate::session::tuning::SessionTuning;
+use crate::session::tuning_files;
 use crate::session::types::{SessionType, SessionTypeManager};
 use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
@@ -456,6 +457,60 @@ pub fn get_session_tuning(
     id: String,
 ) -> Option<SessionTuning> {
     manager.get_tuning(&id)
+}
+
+// ── Tuning File Management ──
+
+#[tauri::command]
+pub fn install_tuning_files(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Result<Vec<String>, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    let tuning = session.tuning.ok_or("No tuning configured")?;
+    tuning_files::install_files(&session.working_directory, &tuning.file_configs)
+}
+
+#[tauri::command]
+pub fn uninstall_tuning_file(
+    manager: State<'_, SessionManager>,
+    id: String,
+    relative_path: String,
+) -> Result<bool, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    tuning_files::uninstall_file(&session.working_directory, &relative_path)
+}
+
+#[tauri::command]
+pub fn uninstall_all_tuning_files(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Result<Vec<String>, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    let tuning = session.tuning.ok_or("No tuning configured")?;
+    tuning_files::uninstall_all(&session.working_directory, &tuning.file_configs)
+}
+
+#[tauri::command]
+pub fn get_tuning_install_status(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Vec<tuning_files::FileInstallStatus> {
+    let session = match manager.get(&id) {
+        Some(s) => s,
+        None => return vec![],
+    };
+    let tuning = match session.tuning {
+        Some(t) => t,
+        None => return vec![],
+    };
+    tuning_files::get_install_status(&session.working_directory, &tuning.file_configs)
 }
 
 // ── Diagnostics ──
