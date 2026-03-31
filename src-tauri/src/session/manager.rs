@@ -6,6 +6,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use super::config::{CreateSessionRequest, SessionConfig};
+use super::tuning::SessionTuning;
 
 pub struct SessionManager {
     sessions: Mutex<Vec<SessionConfig>>,
@@ -73,6 +74,7 @@ impl SessionManager {
             session_type: req.session_type,
             parked: false,
             parent_id: req.parent_id,
+            tuning: None,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -123,5 +125,30 @@ impl SessionManager {
             session.parked = parked;
         }
         self.persist(&sessions);
+    }
+
+    pub fn update_tuning(
+        &self,
+        id: &str,
+        tuning: Option<SessionTuning>,
+    ) -> Result<(), String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| format!("Session not found: {id}"))?;
+        session.tuning = tuning;
+        session.last_active = Utc::now();
+        self.persist(&sessions);
+        Ok(())
+    }
+
+    pub fn get_tuning(&self, id: &str) -> Option<SessionTuning> {
+        self.sessions
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|s| s.id == id)
+            .and_then(|s| s.tuning.clone())
     }
 }

@@ -10,6 +10,7 @@ use crate::agents::{self, AgentAdapter};
 use crate::intelligence::IntelligenceManager;
 use crate::pty::activity::ActivityTracker;
 use crate::settings::SettingsManager;
+use crate::session::tuning::{self, SessionTuning};
 use crate::session::types::SessionType;
 use crate::status::detector::{HookStatus, SessionStatus, StatusDetector};
 
@@ -21,11 +22,13 @@ struct PtySession {
 
 #[allow(clippy::type_complexity)]
 pub struct PtyPool {
-    sessions: Mutex<HashMap<String, PtySession>>,
+    sessions: Arc<Mutex<HashMap<String, PtySession>>>,
     detectors: Arc<Mutex<HashMap<String, Arc<Mutex<StatusDetector>>>>>,
     adapters: Arc<Mutex<HashMap<String, Arc<Box<dyn AgentAdapter>>>>>,
     preview_lines: Arc<Mutex<HashMap<String, Arc<Mutex<VecDeque<String>>>>>>,
     activity_trackers: Arc<Mutex<HashMap<String, Arc<Mutex<ActivityTracker>>>>>,
+    /// Startup commands queued until the agent signals ready
+    command_queues: Arc<Mutex<HashMap<String, VecDeque<String>>>>,
     app_handle: Mutex<Option<AppHandle>>,
 }
 
@@ -35,11 +38,12 @@ impl PtyPool {
             Arc::new(Mutex::new(HashMap::new()));
 
         Self {
-            sessions: Mutex::new(HashMap::new()),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
             detectors,
             adapters: Arc::new(Mutex::new(HashMap::new())),
             preview_lines: Arc::new(Mutex::new(HashMap::new())),
             activity_trackers: Arc::new(Mutex::new(HashMap::new())),
+            command_queues: Arc::new(Mutex::new(HashMap::new())),
             app_handle: Mutex::new(None),
         }
     }
@@ -60,6 +64,10 @@ impl PtyPool {
             for (id, detector) in map.iter() {
                 if let Some(SessionStatus::Idle) = detector.lock().unwrap().check_silence(2.0) {
                     let _ = handle.emit(&format!("session-status-{id}"), "idle");
+
+                    // Flush startup command queue on first idle detection
+                    let pool = handle.state::<PtyPool>();
+                    pool.flush_command_queue(id);
 
                     // Request intelligence annotation
                     if let Some(preview_arc) = preview_map.lock().unwrap().get(id) {
@@ -378,10 +386,17 @@ impl PtyPool {
         cwd: &str,
         skip_permissions: bool,
         initial_prompt: Option<&str>,
+        tuning: Option<&SessionTuning>,
         rows: u16,
         cols: u16,
         app_handle: &AppHandle,
     ) -> Result<(), String> {
+        // Resolve effective agent config (base + tuning overrides)
+        let effective_config = match tuning {
+            Some(t) => tuning::resolve_agent_config(&session_type.agent_config, &t.config_overrides),
+            None => session_type.agent_config.clone(),
+        };
+
         // Split command on whitespace to support multi-word commands (e.g. "python3 -m myagent")
         let parts: Vec<&str> = session_type.command.split_whitespace().collect();
         let mut cmd = CommandBuilder::new(parts.first().unwrap_or(&""));
@@ -397,7 +412,7 @@ impl PtyPool {
         // Claude-specific flags
         if session_type.id == "claude-code" {
             // permission_mode takes precedence over skip_permissions
-            if session_type.agent_config.permission_mode.is_none() && skip_permissions {
+            if effective_config.permission_mode.is_none() && skip_permissions {
                 cmd.arg("--dangerously-skip-permissions");
             }
             if let Some(prompt) = initial_prompt {
@@ -408,8 +423,15 @@ impl PtyPool {
             }
         }
 
-        // Apply per-type agent configuration
-        apply_agent_config(&mut cmd, session_type);
+        // Apply resolved agent configuration
+        apply_agent_config(&mut cmd, &session_type.id, &effective_config);
+
+        // Apply extra args from tuning overrides (effort, thinking, agent, worktree)
+        if let Some(t) = tuning {
+            for arg in tuning::extra_args_from_overrides(&t.config_overrides) {
+                cmd.arg(arg);
+            }
+        }
 
         cmd.cwd(cwd);
 
@@ -427,6 +449,11 @@ impl PtyPool {
         } else {
             Some(&session_type.status_patterns)
         };
+
+        // Queue startup commands if tuning specifies them
+        if let Some(t) = tuning {
+            self.queue_startup_commands(id, t.startup_commands.clone());
+        }
 
         let adapter = agents::create_adapter(&session_type.id);
         self.spawn_inner(id, cmd, rows, cols, app_handle, patterns, adapter)
@@ -491,6 +518,47 @@ impl PtyPool {
             .unwrap_or_default()
     }
 
+    /// Queue startup commands for a session. They'll be flushed when the agent signals ready.
+    pub fn queue_startup_commands(&self, id: &str, commands: Vec<String>) {
+        if commands.is_empty() {
+            return;
+        }
+        let mut queues = self.command_queues.lock().unwrap();
+        queues.insert(id.to_string(), VecDeque::from(commands));
+    }
+
+    /// Flush queued startup commands into the PTY. Called when agent signals ready
+    /// (SessionStart hook for Claude Code, first idle for other agents).
+    pub fn flush_command_queue(&self, id: &str) {
+        let commands: Vec<String> = {
+            let mut queues = self.command_queues.lock().unwrap();
+            match queues.remove(id) {
+                Some(q) => q.into_iter().collect(),
+                None => return,
+            }
+        };
+
+        if commands.is_empty() {
+            return;
+        }
+
+        // Write each command with a small delay between them
+        let session_id = id.to_string();
+        let sessions = self.sessions.clone();
+        std::thread::spawn(move || {
+            for command in commands {
+                // Small delay to let the agent process
+                std::thread::sleep(Duration::from_millis(200));
+                let mut sessions_guard = sessions.lock().unwrap();
+                if let Some(session) = sessions_guard.get_mut(&session_id) {
+                    let data = format!("{command}\n");
+                    let _ = session.writer.write_all(data.as_bytes());
+                    let _ = session.writer.flush();
+                }
+            }
+        });
+    }
+
     /// Set hook-confirmed status on a session's detector.
     pub fn set_hook_status(&self, id: &str, status: HookStatus) {
         if let Some(detector) = self.detectors.lock().unwrap().get(id) {
@@ -510,6 +578,7 @@ impl PtyPool {
         self.adapters.lock().unwrap().remove(id);
         self.preview_lines.lock().unwrap().remove(id);
         self.activity_trackers.lock().unwrap().remove(id);
+        self.command_queues.lock().unwrap().remove(id);
         Ok(())
     }
 
@@ -520,11 +589,18 @@ impl PtyPool {
         session_type: &SessionType,
         cwd: &str,
         skip_permissions: bool,
+        tuning: Option<&SessionTuning>,
         rows: u16,
         cols: u16,
         app_handle: &AppHandle,
     ) -> Result<(), String> {
         self.kill(id)?;
+
+        // Resolve effective agent config
+        let effective_config = match tuning {
+            Some(t) => tuning::resolve_agent_config(&session_type.agent_config, &t.config_overrides),
+            None => session_type.agent_config.clone(),
+        };
 
         // Split command on whitespace to support multi-word commands
         let parts: Vec<&str> = session_type.command.split_whitespace().collect();
@@ -536,7 +612,7 @@ impl PtyPool {
         // Claude-specific: use --continue on restart
         if session_type.id == "claude-code" {
             cmd.arg("--continue");
-            if session_type.agent_config.permission_mode.is_none() && skip_permissions {
+            if effective_config.permission_mode.is_none() && skip_permissions {
                 cmd.arg("--dangerously-skip-permissions");
             }
         }
@@ -546,8 +622,15 @@ impl PtyPool {
             cmd.arg(arg);
         }
 
-        // Apply per-type agent configuration
-        apply_agent_config(&mut cmd, session_type);
+        // Apply resolved agent configuration
+        apply_agent_config(&mut cmd, &session_type.id, &effective_config);
+
+        // Apply extra args from tuning overrides
+        if let Some(t) = tuning {
+            for arg in tuning::extra_args_from_overrides(&t.config_overrides) {
+                cmd.arg(arg);
+            }
+        }
 
         cmd.cwd(cwd);
 
@@ -565,16 +648,19 @@ impl PtyPool {
             Some(&session_type.status_patterns)
         };
 
+        // Queue startup commands if tuning specifies them
+        if let Some(t) = tuning {
+            self.queue_startup_commands(id, t.startup_commands.clone());
+        }
+
         let adapter = agents::create_adapter(&session_type.id);
         self.spawn_inner(id, cmd, rows, cols, app_handle, patterns, adapter)
     }
 }
 
 /// Translate AgentConfig fields into CLI arguments and env vars on the command.
-fn apply_agent_config(cmd: &mut CommandBuilder, session_type: &SessionType) {
-    let config = &session_type.agent_config;
-
-    if session_type.id == "claude-code" {
+fn apply_agent_config(cmd: &mut CommandBuilder, session_type_id: &str, config: &crate::session::types::AgentConfig) {
+    if session_type_id == "claude-code" {
         if let Some(mode) = &config.permission_mode {
             cmd.arg("--permission-mode");
             cmd.arg(mode);

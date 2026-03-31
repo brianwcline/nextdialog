@@ -1,0 +1,405 @@
+import { useState, useCallback } from "react";
+import { useTuning } from "../hooks/useTuning";
+import type { AgentConfigOverrides } from "../lib/types";
+
+interface TuningPanelProps {
+  sessionId: string;
+  sessionType: string;
+  onDismiss: () => void;
+  onRestart: () => void;
+}
+
+const MODEL_OPTIONS = ["haiku", "sonnet", "opus"];
+const EFFORT_OPTIONS = ["low", "medium", "high", "max"];
+const PERMISSION_OPTIONS = ["default", "plan", "acceptEdits", "dontAsk", "bypassPermissions"];
+const THINKING_OPTIONS = ["enabled", "adaptive", "disabled"];
+
+export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: TuningPanelProps) {
+  const { tuning, loading, hasTuning, updateOverrides, updateStartupCommands, clearTuning } = useTuning(sessionId);
+  const [newCommand, setNewCommand] = useState("");
+  const [dirty, setDirty] = useState(false);
+
+  const overrides = tuning?.config_overrides ?? {};
+  const startupCommands = tuning?.startup_commands ?? [];
+
+  const isClaude = sessionType === "claude-code";
+  const isCursor = sessionType === "cursor-agent";
+
+  const handleOverride = useCallback(
+    async (key: keyof AgentConfigOverrides, value: unknown) => {
+      await updateOverrides({ [key]: value });
+      setDirty(true);
+    },
+    [updateOverrides],
+  );
+
+  const handleAddCommand = useCallback(async () => {
+    const trimmed = newCommand.trim();
+    if (!trimmed) return;
+    await updateStartupCommands([...startupCommands, trimmed]);
+    setNewCommand("");
+  }, [newCommand, startupCommands, updateStartupCommands]);
+
+  const handleRemoveCommand = useCallback(
+    async (index: number) => {
+      await updateStartupCommands(startupCommands.filter((_, i) => i !== index));
+    },
+    [startupCommands, updateStartupCommands],
+  );
+
+  const handleClear = useCallback(async () => {
+    await clearTuning();
+    setDirty(false);
+  }, [clearTuning]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-[#181825] text-slate-500 text-sm">
+        Loading tuning...
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-[#181825] text-slate-300" onClick={(e) => e.stopPropagation()}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/50">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-medium text-slate-200">Session Tuning</h2>
+          {hasTuning && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-violet-500/20 text-violet-300">
+              Active
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasTuning && (
+            <button
+              onClick={handleClear}
+              className="px-2 py-1 rounded text-xs text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
+          <button
+            onClick={onDismiss}
+            className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M11 3L3 11M3 3L11 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body — scrollable */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+        {/* Quick Toggles — Claude Code */}
+        {isClaude && (
+          <section>
+            <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Quick Toggles</h3>
+            <div className="space-y-3">
+              {/* Model */}
+              <ToggleRow label="Model">
+                <ButtonGroup
+                  options={MODEL_OPTIONS}
+                  value={overrides.model ?? null}
+                  onChange={(v) => handleOverride("model", v)}
+                />
+              </ToggleRow>
+
+              {/* Effort */}
+              <ToggleRow label="Effort">
+                <ButtonGroup
+                  options={EFFORT_OPTIONS}
+                  value={overrides.effort ?? null}
+                  onChange={(v) => handleOverride("effort", v)}
+                />
+              </ToggleRow>
+
+              {/* Permission Mode */}
+              <ToggleRow label="Permission">
+                <ButtonGroup
+                  options={PERMISSION_OPTIONS}
+                  value={overrides.permission_mode ?? null}
+                  onChange={(v) => handleOverride("permission_mode", v)}
+                />
+              </ToggleRow>
+
+              {/* Thinking */}
+              <ToggleRow label="Thinking">
+                <ButtonGroup
+                  options={THINKING_OPTIONS}
+                  value={overrides.thinking_mode ?? null}
+                  onChange={(v) => handleOverride("thinking_mode", v)}
+                />
+              </ToggleRow>
+
+              {/* Boolean toggles */}
+              <div className="flex items-center gap-4">
+                <BoolToggle
+                  label="Chrome"
+                  value={overrides.chrome_enabled ?? null}
+                  onChange={(v) => handleOverride("chrome_enabled", v)}
+                />
+                <BoolToggle
+                  label="Verbose"
+                  value={overrides.verbose ?? null}
+                  onChange={(v) => handleOverride("verbose", v)}
+                />
+                <BoolToggle
+                  label="Worktree"
+                  value={overrides.worktree ?? null}
+                  onChange={(v) => handleOverride("worktree", v)}
+                />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Quick Toggles — Cursor */}
+        {isCursor && (
+          <section>
+            <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Quick Toggles</h3>
+            <div className="text-xs text-slate-500">
+              Cursor tuning: add rules, skills, and hooks via the Files section (coming in Phase 3).
+            </div>
+          </section>
+        )}
+
+        {/* System Prompt (Claude only) */}
+        {isClaude && (
+          <CollapsibleSection title="System Prompt" defaultOpen={!!overrides.append_system_prompt}>
+            <textarea
+              value={overrides.append_system_prompt ?? ""}
+              onChange={(e) => handleOverride("append_system_prompt", e.target.value || null)}
+              placeholder="Appended to Claude's system prompt (--append-system-prompt)"
+              rows={4}
+              className="w-full bg-[#1E1E2E] border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-600 resize-y focus:outline-none focus:border-violet-500/50"
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Startup Commands */}
+        <CollapsibleSection title="Startup Commands" defaultOpen={startupCommands.length > 0}>
+          <div className="space-y-2">
+            {startupCommands.map((cmd, i) => (
+              <div key={i} className="flex items-center gap-2 group">
+                <span className="flex-1 text-xs font-mono text-slate-400 bg-[#1E1E2E] rounded px-2.5 py-1.5 border border-slate-700/30">
+                  {cmd}
+                </span>
+                <button
+                  onClick={() => handleRemoveCommand(i)}
+                  className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all text-xs"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newCommand}
+                onChange={(e) => setNewCommand(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddCommand()}
+                placeholder="/loop 5m /run-tests"
+                className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 font-mono focus:outline-none focus:border-violet-500/50"
+              />
+              <button
+                onClick={handleAddCommand}
+                disabled={!newCommand.trim()}
+                className="px-2.5 py-1.5 rounded text-xs bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Add
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-600">
+              Typed into the session after the agent signals ready.
+            </p>
+          </div>
+        </CollapsibleSection>
+
+        {/* Advanced */}
+        <CollapsibleSection title="Advanced">
+          <div className="space-y-3">
+            {isClaude && (
+              <>
+                <TextInput
+                  label="Max Turns"
+                  type="number"
+                  value={overrides.max_turns?.toString() ?? ""}
+                  onChange={(v) => handleOverride("max_turns", v ? parseInt(v) : null)}
+                  placeholder="No limit"
+                />
+                <TextInput
+                  label="MCP Config Path"
+                  value={overrides.mcp_config_path ?? ""}
+                  onChange={(v) => handleOverride("mcp_config_path", v || null)}
+                  placeholder="/path/to/mcp.json"
+                />
+                <TextInput
+                  label="Main Thread Agent"
+                  value={overrides.agent ?? ""}
+                  onChange={(v) => handleOverride("agent", v || null)}
+                  placeholder="agent-name (from .claude/agents/)"
+                />
+              </>
+            )}
+            <TextInput
+              label="Custom CLI Args"
+              value={(overrides.custom_args ?? []).join(" ")}
+              onChange={(v) => handleOverride("custom_args", v ? v.split(/\s+/) : null)}
+              placeholder="--flag1 --flag2 value"
+            />
+          </div>
+        </CollapsibleSection>
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-3 border-t border-slate-700/50 flex items-center justify-between">
+        <span className="text-[10px] text-slate-600">
+          {dirty ? "Restart to apply CLI changes" : hasTuning ? "Tuning active" : "No tuning applied"}
+        </span>
+        {dirty && (
+          <button
+            onClick={() => { onRestart(); setDirty(false); }}
+            className="px-3 py-1.5 rounded-md text-xs bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors"
+          >
+            Apply & Restart
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-components ──
+
+function ToggleRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-slate-400 w-20 shrink-0">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function ButtonGroup({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <div className="flex gap-1">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          onClick={() => onChange(value === opt ? null : opt)}
+          className={`px-2 py-1 rounded text-[11px] transition-colors ${
+            value === opt
+              ? "bg-violet-500/30 text-violet-200 border border-violet-500/50"
+              : "bg-slate-800/50 text-slate-500 border border-transparent hover:text-slate-300 hover:bg-slate-700/50"
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function BoolToggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <button
+      onClick={() => {
+        if (value === null) onChange(true);
+        else if (value === true) onChange(false);
+        else onChange(null);
+      }}
+      className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] transition-colors ${
+        value === true
+          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+          : value === false
+            ? "bg-red-500/15 text-red-400 border border-red-500/30"
+            : "bg-slate-800/50 text-slate-500 border border-transparent hover:text-slate-300"
+      }`}
+    >
+      <span className="text-[9px]">
+        {value === true ? "ON" : value === false ? "OFF" : "—"}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 hover:text-slate-300 transition-colors"
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          className={`transition-transform ${open ? "rotate-90" : ""}`}
+        >
+          <path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {title}
+      </button>
+      {open && <div className="pl-4">{children}</div>}
+    </section>
+  );
+}
+
+function TextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-400 w-28 shrink-0">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 font-mono focus:outline-none focus:border-violet-500/50"
+      />
+    </div>
+  );
+}

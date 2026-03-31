@@ -20,6 +20,7 @@ export interface Session {
   session_type: string;
   parked: boolean;
   parent_id?: string;
+  tuning?: SessionTuning;
   hookEnabled?: boolean;
   lastToolUse?: string;
   hookNotification?: string;
@@ -80,3 +81,55 @@ export interface SessionType {
   /** Runtime flag — true if the command binary exists on PATH. Set by useSessionTypes, not persisted. */
   available?: boolean;
 }
+
+// ── Session Tuning ──
+
+export interface AgentConfigOverrides {
+  permission_mode?: string | null;
+  allowed_tools?: string[] | null;
+  disallowed_tools?: string[] | null;
+  model?: string | null;
+  effort?: string | null;
+  mcp_config_path?: string | null;
+  append_system_prompt?: string | null;
+  max_turns?: number | null;
+  verbose?: boolean | null;
+  chrome_enabled?: boolean | null;
+  thinking_mode?: string | null;
+  additional_dirs?: string[] | null;
+  agent?: string | null;
+  worktree?: boolean | null;
+  custom_args?: string[] | null;
+  custom_env?: Record<string, string> | null;
+}
+
+export type FileConfigKind =
+  | "Command"
+  | "Agent"
+  | "Skill"
+  | "OutputStyle"
+  | "Rule"
+  | "CursorHook"
+  | "CursorSkill"
+  | "GeminiCommand"
+  | "ContextFile"
+  | "McpConfig";
+
+export interface FileConfig {
+  kind: FileConfigKind;
+  relative_path: string;
+  content: string;
+}
+
+export interface SessionTuning {
+  profile_id?: string;
+  config_overrides: AgentConfigOverrides;
+  file_configs: FileConfig[];
+  startup_commands: string[];
+}
+
+export const defaultSessionTuning: SessionTuning = {
+  config_overrides: {},
+  file_configs: [],
+  startup_commands: [],
+};

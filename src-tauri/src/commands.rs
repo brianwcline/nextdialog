@@ -11,6 +11,7 @@ use crate::pty::pool::PtyPool;
 use crate::session::config::{CreateSessionRequest, SessionConfig};
 use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
+use crate::session::tuning::SessionTuning;
 use crate::session::types::{SessionType, SessionTypeManager};
 use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
@@ -124,6 +125,7 @@ pub fn spawn_pty_session(
         &session.working_directory,
         session.skip_permissions,
         session.initial_prompt.as_deref(),
+        session.tuning.as_ref(),
         rows.unwrap_or(24),
         cols.unwrap_or(80),
         &app_handle,
@@ -196,6 +198,7 @@ pub fn restart_pty_session(
         &session_type,
         &session.working_directory,
         session.skip_permissions,
+        session.tuning.as_ref(),
         rows.unwrap_or(24),
         cols.unwrap_or(80),
         &app_handle,
@@ -434,6 +437,25 @@ pub fn get_background_image_data(
         _ => "image/jpeg",
     };
     Some(format!("data:{};base64,{}", mime, BASE64.encode(&data)))
+}
+
+// ── Session Tuning ──
+
+#[tauri::command]
+pub fn update_session_tuning(
+    manager: State<'_, SessionManager>,
+    id: String,
+    tuning: Option<SessionTuning>,
+) -> Result<(), String> {
+    manager.update_tuning(&id, tuning)
+}
+
+#[tauri::command]
+pub fn get_session_tuning(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Option<SessionTuning> {
+    manager.get_tuning(&id)
 }
 
 // ── Diagnostics ──

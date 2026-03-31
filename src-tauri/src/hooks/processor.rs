@@ -70,6 +70,10 @@ pub fn process(session_id: &str, payload: HookPayload, app_handle: &AppHandle) {
                 &format!("session-hook-lifecycle-{session_id}"),
                 "started",
             );
+            // Flush queued startup commands now that the agent is ready
+            if let Some(pool) = app_handle.try_state::<crate::pty::pool::PtyPool>() {
+                pool.flush_command_queue(session_id);
+            }
             Some(TimelineEntry::new("lifecycle", "Session started"))
         }
         HookEvent::SessionEnd => {

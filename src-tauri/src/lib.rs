@@ -104,6 +104,8 @@ pub fn run() {
             commands::get_background_image_data,
             commands::get_timeline_entries,
             commands::catch_me_up,
+            commands::update_session_tuning,
+            commands::get_session_tuning,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

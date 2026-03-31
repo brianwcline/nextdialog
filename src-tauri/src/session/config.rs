@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use super::tuning::SessionTuning;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionConfig {
     pub id: String,
@@ -19,6 +21,9 @@ pub struct SessionConfig {
     pub parked: bool,
     #[serde(default)]
     pub parent_id: Option<String>,
+    /// Per-session tuning overrides (model, effort, hooks, commands, etc.)
+    #[serde(default)]
+    pub tuning: Option<SessionTuning>,
 }
 
 fn default_session_type() -> String {
