@@ -1,20 +1,28 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { defaultSessionTuning } from "../lib/types";
-import type { SessionTuning, AgentConfigOverrides, HookEntry, PermissionRules, FileConfig } from "../lib/types";
+import type { SessionTuning, AgentConfigOverrides, AgentConfig, HookEntry, PermissionRules, FileConfig, SessionType } from "../lib/types";
 
-export function useTuning(sessionId: string) {
+export function useTuning(sessionId: string, sessionType: string) {
   const [tuning, setTuning] = useState<SessionTuning | null>(null);
+  const [baseline, setBaseline] = useState<AgentConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load tuning from backend
+  // Load tuning and baseline agent config from backend
   useEffect(() => {
     setLoading(true);
-    invoke<SessionTuning | null>("get_session_tuning", { id: sessionId })
-      .then((t) => setTuning(t))
+    Promise.all([
+      invoke<SessionTuning | null>("get_session_tuning", { id: sessionId }),
+      invoke<SessionType[]>("list_session_types"),
+    ])
+      .then(([t, types]) => {
+        setTuning(t);
+        const st = types.find((ty) => ty.id === sessionType);
+        if (st) setBaseline(st.agent_config);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [sessionId, sessionType]);
 
   // Save tuning to backend and update local state
   const saveTuning = useCallback(
@@ -95,6 +103,7 @@ export function useTuning(sessionId: string) {
 
   return {
     tuning,
+    baseline,
     loading,
     hasTuning,
     saveTuning,

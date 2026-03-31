@@ -38,7 +38,7 @@ const THINKING_OPTIONS = [
 ];
 
 export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: TuningPanelProps) {
-  const { tuning, loading, hasTuning, saveTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, updateFileConfigs, clearTuning } = useTuning(sessionId);
+  const { tuning, baseline, loading, hasTuning, saveTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, updateFileConfigs, clearTuning } = useTuning(sessionId, sessionType);
   const { profiles, saveProfile, deleteProfile } = useProfiles(sessionType);
   const [newCommand, setNewCommand] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -236,6 +236,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={MODEL_OPTIONS}
                   value={overrides.model ?? null}
+                  baselineValue={baseline?.model}
                   onChange={(v) => handleOverride("model", v)}
                 />
               </ToggleRow>
@@ -244,6 +245,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={EFFORT_OPTIONS}
                   value={overrides.effort ?? null}
+                  baselineValue={null}
                   onChange={(v) => handleOverride("effort", v)}
                 />
               </ToggleRow>
@@ -252,6 +254,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={PERMISSION_OPTIONS}
                   value={overrides.permission_mode ?? null}
+                  baselineValue={baseline?.permission_mode}
                   onChange={(v) => handleOverride("permission_mode", v)}
                 />
               </ToggleRow>
@@ -260,6 +263,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={THINKING_OPTIONS}
                   value={overrides.thinking_mode ?? null}
+                  baselineValue={null}
                   onChange={(v) => handleOverride("thinking_mode", v)}
                 />
               </ToggleRow>
@@ -269,18 +273,21 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                   label="Chrome"
                   hint="Browser integration"
                   value={overrides.chrome_enabled ?? null}
+                  baselineValue={baseline?.chrome_enabled}
                   onChange={(v) => handleOverride("chrome_enabled", v)}
                 />
                 <BoolToggle
                   label="Verbose"
                   hint="Detailed output"
                   value={overrides.verbose ?? null}
+                  baselineValue={baseline?.verbose ?? null}
                   onChange={(v) => handleOverride("verbose", v)}
                 />
                 <BoolToggle
                   label="Worktree"
                   hint="Git isolation"
                   value={overrides.worktree ?? null}
+                  baselineValue={null}
                   onChange={(v) => handleOverride("worktree", v)}
                 />
               </div>
@@ -491,28 +498,36 @@ function ToggleRow({ label, hint, children }: { label: string; hint?: string; ch
 function ButtonGroup({
   options,
   value,
+  baselineValue,
   onChange,
 }: {
   options: OptionItem[];
   value: string | null;
+  baselineValue?: string | null;
   onChange: (value: string | null) => void;
 }) {
   return (
     <div className="flex gap-1">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(value === opt.value ? null : opt.value)}
-          title={opt.hint}
-          className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
-            value === opt.value
-              ? "bg-violet-500/30 text-violet-200 border border-violet-500/50"
-              : "bg-slate-800/50 text-slate-500 border border-transparent hover:text-slate-300 hover:bg-slate-700/50"
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+      {options.map((opt) => {
+        const isOverride = value === opt.value;
+        const isBaseline = !value && baselineValue === opt.value;
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onChange(value === opt.value ? null : opt.value)}
+            title={opt.hint}
+            className={`px-2.5 py-1 rounded text-[11px] transition-colors ${
+              isOverride
+                ? "bg-violet-500/30 text-violet-200 border border-violet-500/50"
+                : isBaseline
+                  ? "bg-slate-700/40 text-slate-300 border border-slate-600/50"
+                  : "bg-slate-800/50 text-slate-500 border border-transparent hover:text-slate-300 hover:bg-slate-700/50"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -521,13 +536,19 @@ function BoolToggle({
   label,
   hint,
   value,
+  baselineValue,
   onChange,
 }: {
   label: string;
   hint?: string;
   value: boolean | null;
+  baselineValue?: boolean | null;
   onChange: (value: boolean | null) => void;
 }) {
+  // Show the effective value: override if set, otherwise baseline
+  const effective = value ?? baselineValue ?? null;
+  const isOverride = value !== null && value !== undefined;
+
   return (
     <button
       onClick={() => {
@@ -537,15 +558,21 @@ function BoolToggle({
       }}
       title={hint}
       className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] transition-colors ${
-        value === true
+        isOverride && value === true
           ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-          : value === false
+          : isOverride && value === false
             ? "bg-red-500/15 text-red-400 border border-red-500/30"
-            : "bg-slate-800/50 text-slate-500 border border-transparent hover:text-slate-300"
+            : effective === true
+              ? "bg-slate-700/40 text-slate-300 border border-slate-600/50"
+              : effective === false
+                ? "bg-slate-700/30 text-slate-400 border border-slate-600/30"
+                : "bg-slate-800/50 text-slate-500 border border-transparent hover:text-slate-300"
       }`}
     >
       <span className="text-[9px]">
-        {value === true ? "ON" : value === false ? "OFF" : "—"}
+        {isOverride
+          ? (value === true ? "ON" : "OFF")
+          : (effective === true ? "on" : effective === false ? "off" : "—")}
       </span>
       {label}
     </button>
