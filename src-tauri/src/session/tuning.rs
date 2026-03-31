@@ -23,6 +23,14 @@ pub struct SessionTuning {
     /// Commands typed into the session after the agent is ready
     #[serde(default)]
     pub startup_commands: Vec<String>,
+
+    /// Structured hook definitions (installed into settings.local.json)
+    #[serde(default)]
+    pub hooks_config: Vec<HookEntry>,
+
+    /// Permission allow/deny/ask rules
+    #[serde(default)]
+    pub permission_rules: PermissionRules,
 }
 
 /// Every field is Option — None means "inherit from SessionType.agent_config".
@@ -128,6 +136,58 @@ pub enum FileConfigKind {
     // Cross-agent
     ContextFile,  // CLAUDE.md, .gemini/GEMINI.md, etc.
     McpConfig,    // .mcp.json, .cursor/mcp.json
+}
+
+/// A single hook definition — maps to Claude Code's hook config format.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HookEntry {
+    /// Hook event name: "PreToolUse", "PostToolUse", "Stop", "SessionStart", etc.
+    pub event: String,
+
+    /// Optional matcher: tool name pattern, regex, or pipe-separated alternatives.
+    /// e.g., "Write|Edit", "Bash", ".*"
+    #[serde(default)]
+    pub matcher: Option<String>,
+
+    /// Hook type: "command", "prompt", "agent", "http"
+    pub hook_type: String,
+
+    /// The hook payload — shell command, prompt text, URL, etc.
+    pub command: String,
+
+    /// Optional permission rule condition: "Bash(git *)", "Edit(/src/**)"
+    #[serde(default)]
+    pub if_condition: Option<String>,
+
+    /// Timeout in seconds
+    #[serde(default)]
+    pub timeout: Option<u32>,
+
+    /// Run in background without blocking
+    #[serde(default)]
+    pub async_mode: bool,
+
+    /// Run once then self-remove
+    #[serde(default)]
+    pub once: bool,
+
+    /// Model for prompt/agent hooks
+    #[serde(default)]
+    pub model: Option<String>,
+
+    /// Optional recipe ID this hook was generated from (for UI tracking)
+    #[serde(default)]
+    pub recipe_id: Option<String>,
+}
+
+/// Permission allow/deny/ask rules using wildcard syntax.
+/// e.g., "Bash(git *)", "Edit(/src/**)", "Bash(npm run *)"
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PermissionRules {
+    #[serde(default)]
+    pub allow: Vec<String>,
+    #[serde(default)]
+    pub deny: Vec<String>,
 }
 
 /// Merge a SessionType's base AgentConfig with per-session overrides.
@@ -288,6 +348,22 @@ mod tests {
                 content: "---\ndescription: Test\n---\nRun tests".to_string(),
             }],
             startup_commands: vec!["/loop 5m /test".to_string()],
+            hooks_config: vec![HookEntry {
+                event: "PostToolUse".to_string(),
+                matcher: Some("Write|Edit".to_string()),
+                hook_type: "command".to_string(),
+                command: "prettier --write".to_string(),
+                if_condition: None,
+                timeout: None,
+                async_mode: true,
+                once: false,
+                model: None,
+                recipe_id: Some("auto-format".to_string()),
+            }],
+            permission_rules: PermissionRules {
+                allow: vec!["Bash(git *)".to_string()],
+                deny: vec![],
+            },
         };
 
         let json = serde_json::to_string(&tuning).unwrap();
@@ -301,5 +377,9 @@ mod tests {
         assert_eq!(deserialized.file_configs.len(), 1);
         assert_eq!(deserialized.file_configs[0].kind, FileConfigKind::Command);
         assert_eq!(deserialized.startup_commands.len(), 1);
+        assert_eq!(deserialized.hooks_config.len(), 1);
+        assert_eq!(deserialized.hooks_config[0].event, "PostToolUse");
+        assert!(deserialized.hooks_config[0].async_mode);
+        assert_eq!(deserialized.permission_rules.allow.len(), 1);
     }
 }

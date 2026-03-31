@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { useTuning } from "../hooks/useTuning";
+import { HooksSection } from "./tuning/HooksSection";
+import { PermissionsSection } from "./tuning/PermissionsSection";
 import type { AgentConfigOverrides } from "../lib/types";
 
 interface TuningPanelProps {
@@ -15,12 +17,14 @@ const PERMISSION_OPTIONS = ["default", "plan", "acceptEdits", "dontAsk", "bypass
 const THINKING_OPTIONS = ["enabled", "adaptive", "disabled"];
 
 export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: TuningPanelProps) {
-  const { tuning, loading, hasTuning, updateOverrides, updateStartupCommands, clearTuning } = useTuning(sessionId);
+  const { tuning, loading, hasTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, clearTuning } = useTuning(sessionId);
   const [newCommand, setNewCommand] = useState("");
   const [dirty, setDirty] = useState(false);
 
   const overrides = tuning?.config_overrides ?? {};
   const startupCommands = tuning?.startup_commands ?? [];
+  const hooksConfig = tuning?.hooks_config ?? [];
+  const permissionRules = tuning?.permission_rules ?? { allow: [], deny: [] };
 
   const isClaude = sessionType === "claude-code";
   const isCursor = sessionType === "cursor-agent";
@@ -177,6 +181,26 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
               placeholder="Appended to Claude's system prompt (--append-system-prompt)"
               rows={4}
               className="w-full bg-[#1E1E2E] border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-600 resize-y focus:outline-none focus:border-violet-500/50"
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Hooks (Claude only) */}
+        {isClaude && (
+          <CollapsibleSection title="Hooks" defaultOpen={hooksConfig.length > 0}>
+            <HooksSection
+              hooks={hooksConfig}
+              onUpdate={(hooks) => { updateHooks(hooks); setDirty(true); }}
+            />
+          </CollapsibleSection>
+        )}
+
+        {/* Permissions (Claude only) */}
+        {isClaude && (
+          <CollapsibleSection title="Permissions" defaultOpen={permissionRules.allow.length > 0 || permissionRules.deny.length > 0}>
+            <PermissionsSection
+              rules={permissionRules}
+              onUpdate={(rules) => { updatePermissions(rules); setDirty(true); }}
             />
           </CollapsibleSection>
         )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { SessionTuning, AgentConfigOverrides } from "../lib/types";
+import { defaultSessionTuning } from "../lib/types";
+import type { SessionTuning, AgentConfigOverrides, HookEntry, PermissionRules } from "../lib/types";
 
 export function useTuning(sessionId: string) {
   const [tuning, setTuning] = useState<SessionTuning | null>(null);
@@ -27,7 +28,7 @@ export function useTuning(sessionId: string) {
   // Update just the config overrides
   const updateOverrides = useCallback(
     async (overrides: Partial<AgentConfigOverrides>) => {
-      const current = tuning ?? { config_overrides: {}, file_configs: [], startup_commands: [] };
+      const current = tuning ?? { ...defaultSessionTuning };
       const merged: SessionTuning = {
         ...current,
         config_overrides: { ...current.config_overrides, ...overrides },
@@ -40,8 +41,28 @@ export function useTuning(sessionId: string) {
   // Update startup commands
   const updateStartupCommands = useCallback(
     async (commands: string[]) => {
-      const current = tuning ?? { config_overrides: {}, file_configs: [], startup_commands: [] };
+      const current = tuning ?? { ...defaultSessionTuning };
       const merged: SessionTuning = { ...current, startup_commands: commands };
+      await saveTuning(merged);
+    },
+    [tuning, saveTuning],
+  );
+
+  // Update hooks config
+  const updateHooks = useCallback(
+    async (hooks: HookEntry[]) => {
+      const current = tuning ?? { ...defaultSessionTuning };
+      const merged: SessionTuning = { ...current, hooks_config: hooks };
+      await saveTuning(merged);
+    },
+    [tuning, saveTuning],
+  );
+
+  // Update permission rules
+  const updatePermissions = useCallback(
+    async (rules: PermissionRules) => {
+      const current = tuning ?? { ...defaultSessionTuning };
+      const merged: SessionTuning = { ...current, permission_rules: rules };
       await saveTuning(merged);
     },
     [tuning, saveTuning],
@@ -56,7 +77,10 @@ export function useTuning(sessionId: string) {
   const hasTuning = tuning !== null && (
     Object.values(tuning.config_overrides).some((v) => v !== null && v !== undefined) ||
     tuning.file_configs.length > 0 ||
-    tuning.startup_commands.length > 0
+    tuning.startup_commands.length > 0 ||
+    tuning.hooks_config.length > 0 ||
+    tuning.permission_rules.allow.length > 0 ||
+    tuning.permission_rules.deny.length > 0
   );
 
   return {
@@ -66,6 +90,8 @@ export function useTuning(sessionId: string) {
     saveTuning,
     updateOverrides,
     updateStartupCommands,
+    updateHooks,
+    updatePermissions,
     clearTuning,
   };
 }

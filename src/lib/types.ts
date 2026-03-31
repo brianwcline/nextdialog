@@ -121,15 +121,37 @@ export interface FileConfig {
   content: string;
 }
 
+export interface HookEntry {
+  event: string;
+  matcher?: string | null;
+  hook_type: string;
+  command: string;
+  if_condition?: string | null;
+  timeout?: number | null;
+  async_mode: boolean;
+  once: boolean;
+  model?: string | null;
+  recipe_id?: string | null;
+}
+
+export interface PermissionRules {
+  allow: string[];
+  deny: string[];
+}
+
 export interface SessionTuning {
   profile_id?: string;
   config_overrides: AgentConfigOverrides;
   file_configs: FileConfig[];
   startup_commands: string[];
+  hooks_config: HookEntry[];
+  permission_rules: PermissionRules;
 }
 
 export const defaultSessionTuning: SessionTuning = {
   config_overrides: {},
   file_configs: [],
   startup_commands: [],
+  hooks_config: [],
+  permission_rules: { allow: [], deny: [] },
 };
