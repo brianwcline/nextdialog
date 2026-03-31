@@ -174,7 +174,7 @@ export function PermissionsSection({ rules, onUpdate }: PermissionsSectionProps)
                     }
                   }}
                   placeholder="Bash(git *), Edit(/src/**)"
-                  className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 focus:outline-none focus:border-emerald-500/50"
+                  className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 focus:outline-none focus:border-emerald-500/50"
                 />
                 <button
                   onClick={() => { addRule("allow", newAllowRule); setNewAllowRule(""); }}
@@ -206,7 +206,7 @@ export function PermissionsSection({ rules, onUpdate }: PermissionsSectionProps)
                     }
                   }}
                   placeholder="Bash(rm -rf *)"
-                  className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 focus:outline-none focus:border-red-500/50"
+                  className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 focus:outline-none focus:border-red-500/50"
                 />
                 <button
                   onClick={() => { addRule("deny", newDenyRule); setNewDenyRule(""); }}

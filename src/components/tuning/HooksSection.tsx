@@ -319,7 +319,7 @@ function RecipeCard({
               onChange={(e) => onCommandChange(e.target.value)}
               placeholder={recipe.customField.placeholder}
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono focus:outline-none focus:border-violet-500/50"
+              className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono focus:outline-none focus:border-violet-500/50"
             />
           </div>
         </div>
@@ -347,7 +347,7 @@ function CustomHookCard({
           <select
             value={hook.event}
             onChange={(e) => onChange({ event: e.target.value })}
-            className="bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/50"
+            className="bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/50"
           >
             {HOOK_EVENT_GROUPS.map((group) => (
               <optgroup key={group.label} label={group.label}>
@@ -362,7 +362,7 @@ function CustomHookCard({
           <select
             value={hook.hook_type}
             onChange={(e) => onChange({ hook_type: e.target.value })}
-            className="bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/50"
+            className="bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-violet-500/50"
           >
             <option value="command">command</option>
             <option value="prompt">prompt</option>
@@ -387,7 +387,7 @@ function CustomHookCard({
         value={hook.matcher ?? ""}
         onChange={(e) => onChange({ matcher: e.target.value || null })}
         placeholder="Matcher (e.g., Write|Edit, Bash, .*)"
-        className="w-full bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 focus:outline-none focus:border-violet-500/50"
+        className="w-full bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 focus:outline-none focus:border-violet-500/50"
       />
 
       {/* Command/prompt */}
@@ -396,7 +396,7 @@ function CustomHookCard({
         onChange={(e) => onChange({ command: e.target.value })}
         placeholder={hook.hook_type === "http" ? "https://..." : hook.hook_type === "command" ? "shell command..." : "prompt text..."}
         rows={2}
-        className="w-full bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 resize-y focus:outline-none focus:border-violet-500/50"
+        className="w-full bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-400 font-mono placeholder-slate-700 resize-y focus:outline-none focus:border-violet-500/50"
       />
 
       {/* Options row */}
@@ -425,7 +425,7 @@ function CustomHookCard({
             value={hook.if_condition ?? ""}
             onChange={(e) => onChange({ if_condition: e.target.value || null })}
             placeholder="if: Bash(git *)"
-            className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-0.5 text-[10px] text-slate-500 font-mono placeholder-slate-700 focus:outline-none focus:border-violet-500/50"
+            className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-0.5 text-[10px] text-slate-500 font-mono placeholder-slate-700 focus:outline-none focus:border-violet-500/50"
           />
         )}
       </div>

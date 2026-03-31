@@ -254,7 +254,7 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
                   value={file.content}
                   onChange={(e) => updateFileContent(i, e.target.value)}
                   rows={8}
-                  className="w-full bg-[#1E1E2E] border border-slate-700/50 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono resize-y focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-[#141422] border border-slate-700/50 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono resize-y focus:outline-none focus:border-violet-500/50"
                 />
               </div>
             )}
@@ -277,7 +277,7 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
                 value={newName}
                 onChange={(e) => setNewName(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ""))}
                 placeholder="my-command"
-                className="flex-1 bg-[#1E1E2E] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-violet-500/50"
+                className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-1 text-[11px] text-slate-300 font-mono focus:outline-none focus:border-violet-500/50"
                 autoFocus
               />
             </div>
@@ -286,7 +286,7 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             rows={8}
-            className="w-full bg-[#1E1E2E] border border-slate-700/50 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono resize-y focus:outline-none focus:border-violet-500/50"
+            className="w-full bg-[#141422] border border-slate-700/50 rounded-lg px-3 py-2 text-[11px] text-slate-300 font-mono resize-y focus:outline-none focus:border-violet-500/50"
           />
           <div className="flex items-center justify-end gap-2">
             <button

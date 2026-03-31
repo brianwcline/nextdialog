@@ -446,39 +446,26 @@ export function TerminalOverlay({
             />
           ))}
 
-          {/* Tuning panel — slides up from bottom */}
+          {/* Tuning panel — full overlay replacing terminal */}
           <AnimatePresence>
             {tuningOpen && (
-              <>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
-                  className="absolute inset-0 bg-black/50 z-10 backdrop-blur-[2px] pointer-events-auto"
-                  onClick={() => setTuningOpen(false)}
-                />
-                <motion.div
-                  initial={{ y: "100%", opacity: 0.5 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: "100%", opacity: 0 }}
-                  transition={{
-                    y: { duration: 0.4, ease: [0.25, 0.8, 0.25, 1] },
-                    opacity: { duration: 0.25, ease: "easeOut" },
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
+                className="absolute inset-0 z-20 overflow-hidden"
+              >
+                <TuningPanel
+                  sessionId={activeSession.id}
+                  sessionType={activeSession.session_type}
+                  onDismiss={() => setTuningOpen(false)}
+                  onRestart={() => {
+                    setTuningOpen(false);
+                    onRestart(session.id);
                   }}
-                  className="absolute inset-x-0 bottom-0 z-20 h-[80%] overflow-hidden rounded-t-2xl"
-                >
-                  <TuningPanel
-                    sessionId={activeSession.id}
-                    sessionType={activeSession.session_type}
-                    onDismiss={() => setTuningOpen(false)}
-                    onRestart={() => {
-                      setTuningOpen(false);
-                      onRestart(session.id);
-                    }}
-                  />
-                </motion.div>
-              </>
+                />
+              </motion.div>
             )}
           </AnimatePresence>
 
