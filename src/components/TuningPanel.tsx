@@ -13,6 +13,17 @@ interface TuningPanelProps {
   onRestart: () => void;
 }
 
+// Claude Code defaults — used as fallback when SessionType has no explicit config
+const CLAUDE_DEFAULTS = {
+  model: "opus",
+  effort: "medium",
+  permission_mode: "default",
+  thinking_mode: "enabled",
+  verbose: false,
+  chrome_enabled: null as boolean | null,
+  worktree: null as boolean | null,
+};
+
 const MODEL_OPTIONS = [
   { value: "haiku", label: "Haiku", hint: "Fast, cheap" },
   { value: "sonnet", label: "Sonnet", hint: "Balanced" },
@@ -236,7 +247,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={MODEL_OPTIONS}
                   value={overrides.model ?? null}
-                  baselineValue={baseline?.model}
+                  baselineValue={baseline?.model ?? CLAUDE_DEFAULTS.model}
                   onChange={(v) => handleOverride("model", v)}
                 />
               </ToggleRow>
@@ -245,7 +256,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={EFFORT_OPTIONS}
                   value={overrides.effort ?? null}
-                  baselineValue={null}
+                  baselineValue={CLAUDE_DEFAULTS.effort}
                   onChange={(v) => handleOverride("effort", v)}
                 />
               </ToggleRow>
@@ -254,7 +265,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={PERMISSION_OPTIONS}
                   value={overrides.permission_mode ?? null}
-                  baselineValue={baseline?.permission_mode}
+                  baselineValue={baseline?.permission_mode ?? CLAUDE_DEFAULTS.permission_mode}
                   onChange={(v) => handleOverride("permission_mode", v)}
                 />
               </ToggleRow>
@@ -263,7 +274,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={THINKING_OPTIONS}
                   value={overrides.thinking_mode ?? null}
-                  baselineValue={null}
+                  baselineValue={CLAUDE_DEFAULTS.thinking_mode}
                   onChange={(v) => handleOverride("thinking_mode", v)}
                 />
               </ToggleRow>
@@ -273,21 +284,21 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                   label="Chrome"
                   hint="Browser integration"
                   value={overrides.chrome_enabled ?? null}
-                  baselineValue={baseline?.chrome_enabled}
+                  baselineValue={baseline?.chrome_enabled ?? CLAUDE_DEFAULTS.chrome_enabled}
                   onChange={(v) => handleOverride("chrome_enabled", v)}
                 />
                 <BoolToggle
                   label="Verbose"
                   hint="Detailed output"
                   value={overrides.verbose ?? null}
-                  baselineValue={baseline?.verbose ?? null}
+                  baselineValue={baseline?.verbose ?? CLAUDE_DEFAULTS.verbose}
                   onChange={(v) => handleOverride("verbose", v)}
                 />
                 <BoolToggle
                   label="Worktree"
                   hint="Git isolation"
                   value={overrides.worktree ?? null}
-                  baselineValue={null}
+                  baselineValue={CLAUDE_DEFAULTS.worktree}
                   onChange={(v) => handleOverride("worktree", v)}
                 />
               </div>
