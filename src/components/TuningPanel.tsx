@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { useTuning } from "../hooks/useTuning";
+import { useProfiles } from "../hooks/useProfiles";
 import { HooksSection } from "./tuning/HooksSection";
 import { PermissionsSection } from "./tuning/PermissionsSection";
 import { FileConfigsSection, getFileKindsForAgent } from "./tuning/FileConfigsSection";
-import type { AgentConfigOverrides } from "../lib/types";
+import type { AgentConfigOverrides, SessionTuning } from "../lib/types";
 
 interface TuningPanelProps {
   sessionId: string;
@@ -18,9 +19,13 @@ const PERMISSION_OPTIONS = ["default", "plan", "acceptEdits", "dontAsk", "bypass
 const THINKING_OPTIONS = ["enabled", "adaptive", "disabled"];
 
 export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: TuningPanelProps) {
-  const { tuning, loading, hasTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, updateFileConfigs, clearTuning } = useTuning(sessionId);
+  const { tuning, loading, hasTuning, saveTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, updateFileConfigs, clearTuning } = useTuning(sessionId);
+  const { profiles, saveProfile, deleteProfile } = useProfiles(sessionType);
   const [newCommand, setNewCommand] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const overrides = tuning?.config_overrides ?? {};
   const startupCommands = tuning?.startup_commands ?? [];
@@ -59,6 +64,22 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
     setDirty(false);
   }, [clearTuning]);
 
+  const handleSaveProfile = useCallback(async () => {
+    if (!profileName.trim() || !tuning) return;
+    await saveProfile(profileName.trim(), tuning);
+    setProfileName("");
+    setShowSaveDialog(false);
+  }, [profileName, tuning, saveProfile]);
+
+  const handleLoadProfile = useCallback(
+    async (profileTuning: SessionTuning) => {
+      await saveTuning(profileTuning);
+      setDirty(true);
+      setShowProfileMenu(false);
+    },
+    [saveTuning],
+  );
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-[#181825] text-slate-500 text-sm">
@@ -78,8 +99,60 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
               Active
             </span>
           )}
+
+          {/* Profile dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowProfileMenu((v) => !v)}
+              className="px-2 py-1 rounded text-[11px] text-slate-500 hover:text-slate-300 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/30 transition-colors"
+            >
+              {tuning?.profile_id
+                ? profiles.find((p) => p.id === tuning.profile_id)?.name ?? "Profile"
+                : "Load Profile"}
+            </button>
+            {showProfileMenu && (
+              <div className="absolute top-full left-0 mt-1 z-30 min-w-[200px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1">
+                {profiles.length === 0 ? (
+                  <div className="px-3 py-2 text-[11px] text-slate-500">No saved profiles</div>
+                ) : (
+                  profiles.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-slate-600/30 group">
+                      <button
+                        onClick={() => handleLoadProfile(p.tuning)}
+                        className="text-[11px] text-slate-300 text-left flex-1 min-w-0 truncate"
+                      >
+                        {p.name}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteProfile(p.id); }}
+                        className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all ml-2"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+                          <path d="M11 3L3 11M3 3L11 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))
+                )}
+                <div
+                  className="border-t border-slate-600/50 mt-1 pt-1"
+                  onClick={() => setShowProfileMenu(false)}
+                >
+                  {/* Dismiss on backdrop click handled by parent */}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          {hasTuning && (
+            <button
+              onClick={() => setShowSaveDialog(true)}
+              className="px-2 py-1 rounded text-xs text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
+            >
+              Save as Profile
+            </button>
+          )}
           {hasTuning && (
             <button
               onClick={handleClear}
@@ -98,6 +171,36 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
           </button>
         </div>
       </div>
+
+      {/* Save profile dialog */}
+      {showSaveDialog && (
+        <div className="px-5 py-3 border-b border-slate-700/50 bg-violet-500/5">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSaveProfile()}
+              placeholder="Profile name (e.g., PR Babysitter)"
+              className="flex-1 bg-[#1E1E2E] border border-violet-500/30 rounded px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500/50"
+              autoFocus
+            />
+            <button
+              onClick={handleSaveProfile}
+              disabled={!profileName.trim()}
+              className="px-3 py-1.5 rounded text-xs bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 disabled:opacity-30 transition-colors"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => { setShowSaveDialog(false); setProfileName(""); }}
+              className="px-2 py-1.5 rounded text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Body — scrollable */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">

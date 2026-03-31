@@ -16,6 +16,7 @@ use hooks::manager::HookManager;
 use pty::pool::PtyPool;
 use session::file_tracker::FileTracker;
 use session::manager::SessionManager;
+use session::tuning_profiles::TuningProfileManager;
 use session::types::SessionTypeManager;
 use intelligence::IntelligenceManager;
 use settings::SettingsManager;
@@ -43,6 +44,7 @@ pub fn run() {
         .manage(HookManager::new())
         .manage(telemetry_client)
         .manage(TimelineLedger::new())
+        .manage(TuningProfileManager::new())
         .setup(|app| {
             // Clean stale hooks from any previous crash/force-quit
             let sessions = app.state::<SessionManager>();
@@ -110,6 +112,10 @@ pub fn run() {
             commands::uninstall_tuning_file,
             commands::uninstall_all_tuning_files,
             commands::get_tuning_install_status,
+            commands::list_tuning_profiles,
+            commands::create_tuning_profile,
+            commands::update_tuning_profile,
+            commands::delete_tuning_profile,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

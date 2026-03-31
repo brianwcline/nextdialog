@@ -148,6 +148,17 @@ export interface SessionTuning {
   permission_rules: PermissionRules;
 }
 
+export interface TuningProfile {
+  id: string;
+  name: string;
+  description?: string;
+  agent_type: string;
+  tuning: SessionTuning;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
 export const defaultSessionTuning: SessionTuning = {
   config_overrides: {},
   file_configs: [],

@@ -13,6 +13,7 @@ use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
 use crate::session::tuning::SessionTuning;
 use crate::session::tuning_files;
+use crate::session::tuning_profiles::{TuningProfile, TuningProfileManager};
 use crate::session::types::{SessionType, SessionTypeManager};
 use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
@@ -511,6 +512,45 @@ pub fn get_tuning_install_status(
         None => return vec![],
     };
     tuning_files::get_install_status(&session.working_directory, &tuning.file_configs)
+}
+
+// ── Tuning Profiles ──
+
+#[tauri::command]
+pub fn list_tuning_profiles(
+    manager: State<'_, TuningProfileManager>,
+    agent_type: Option<String>,
+) -> Vec<TuningProfile> {
+    manager.list(agent_type.as_deref())
+}
+
+#[tauri::command]
+pub fn create_tuning_profile(
+    manager: State<'_, TuningProfileManager>,
+    name: String,
+    description: Option<String>,
+    agent_type: String,
+    tuning: SessionTuning,
+    tags: Option<Vec<String>>,
+) -> TuningProfile {
+    manager.create(name, description, agent_type, tuning, tags.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn update_tuning_profile(
+    manager: State<'_, TuningProfileManager>,
+    id: String,
+    profile: TuningProfile,
+) -> Result<TuningProfile, String> {
+    manager.update(&id, profile)
+}
+
+#[tauri::command]
+pub fn delete_tuning_profile(
+    manager: State<'_, TuningProfileManager>,
+    id: String,
+) -> Result<(), String> {
+    manager.delete(&id)
 }
 
 // ── Diagnostics ──
