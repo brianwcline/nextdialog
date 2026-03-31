@@ -6,6 +6,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
+use crate::hooks::config as hook_config;
 use crate::hooks::manager::HookManager;
 use crate::pty::pool::PtyPool;
 use crate::session::config::{CreateSessionRequest, SessionConfig};
@@ -121,6 +122,22 @@ pub fn spawn_pty_session(
         }
     }
 
+    // Inject tuning hooks and permissions into settings.local.json
+    if session_type.id == "claude-code" {
+        if let Some(ref tuning) = session.tuning {
+            if !tuning.hooks_config.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_hooks(&session.working_directory, &tuning.hooks_config) {
+                    eprintln!("[tuning] Failed to inject hooks for session {id}: {e}");
+                }
+            }
+            if !tuning.permission_rules.allow.is_empty() || !tuning.permission_rules.deny.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_permissions(&session.working_directory, &tuning.permission_rules) {
+                    eprintln!("[tuning] Failed to inject permissions for session {id}: {e}");
+                }
+            }
+        }
+    }
+
     pool.spawn(
         &id,
         &session_type,
@@ -161,6 +178,15 @@ pub fn kill_pty_session(
     hook_manager: State<'_, HookManager>,
     id: String,
 ) -> Result<(), String> {
+    // Clean up tuning hooks/permissions before teardown
+    if let Some(session) = manager.get(&id) {
+        if session.tuning.is_some() {
+            if let Err(e) = hook_config::remove_tuning_hooks(&session.working_directory) {
+                eprintln!("[tuning] Failed to remove hooks for session {id}: {e}");
+            }
+        }
+    }
+
     pool.kill(&id)?;
     file_tracker.unregister_session(&id);
     hook_manager.teardown_session(&id);
@@ -189,11 +215,30 @@ pub fn restart_pty_session(
         .get(&session.session_type)
         .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
 
-    // Teardown old hooks before restart
+    // Teardown old hooks and tuning hooks before restart
     hook_manager.teardown_session(&id);
+    if session.tuning.is_some() {
+        let _ = hook_config::remove_tuning_hooks(&session.working_directory);
+    }
 
     // Signal frontend to clear the terminal buffer before new PTY output arrives
     let _ = app_handle.emit(&format!("pty-restart-{id}"), ());
+
+    // Inject fresh tuning hooks and permissions for the restarted session
+    if session_type.id == "claude-code" {
+        if let Some(ref tuning) = session.tuning {
+            if !tuning.hooks_config.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_hooks(&session.working_directory, &tuning.hooks_config) {
+                    eprintln!("[tuning] Failed to inject hooks for restarted session {id}: {e}");
+                }
+            }
+            if !tuning.permission_rules.allow.is_empty() || !tuning.permission_rules.deny.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_permissions(&session.working_directory, &tuning.permission_rules) {
+                    eprintln!("[tuning] Failed to inject permissions for restarted session {id}: {e}");
+                }
+            }
+        }
+    }
 
     pool.restart(
         &id,
