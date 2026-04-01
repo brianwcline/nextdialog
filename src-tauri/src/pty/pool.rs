@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -29,6 +30,8 @@ pub struct PtyPool {
     activity_trackers: Arc<Mutex<HashMap<String, Arc<Mutex<ActivityTracker>>>>>,
     /// Startup commands queued until the agent signals ready
     command_queues: Arc<Mutex<HashMap<String, VecDeque<String>>>>,
+    /// Muted sessions — reader thread suppresses all output (used during restart)
+    muted: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
     app_handle: Mutex<Option<AppHandle>>,
 }
 
@@ -44,6 +47,7 @@ impl PtyPool {
             preview_lines: Arc::new(Mutex::new(HashMap::new())),
             activity_trackers: Arc::new(Mutex::new(HashMap::new())),
             command_queues: Arc::new(Mutex::new(HashMap::new())),
+            muted: Arc::new(Mutex::new(HashMap::new())),
             app_handle: Mutex::new(None),
         }
     }
@@ -154,6 +158,13 @@ impl PtyPool {
             .unwrap()
             .insert(id.to_string(), adapter.clone());
 
+        // Create mute flag for this session (set during restart to suppress output)
+        let muted = Arc::new(AtomicBool::new(false));
+        self.muted
+            .lock()
+            .unwrap()
+            .insert(id.to_string(), muted.clone());
+
         // Reader thread — OS thread, not tokio
         let session_id = id.to_string();
         let handle = app_handle.clone();
@@ -166,14 +177,21 @@ impl PtyPool {
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        let _ = handle.emit(&format!("pty-exit-{session_id}"), ());
-                        let _ = handle.emit(
-                            &format!("session-status-{session_id}"),
-                            "stopped",
-                        );
+                        // Don't emit exit events if muted (during restart)
+                        if !muted.load(Ordering::Relaxed) {
+                            let _ = handle.emit(&format!("pty-exit-{session_id}"), ());
+                            let _ = handle.emit(
+                                &format!("session-status-{session_id}"),
+                                "stopped",
+                            );
+                        }
                         break;
                     }
                     Ok(n) => {
+                        // Skip all processing if muted (during restart)
+                        if muted.load(Ordering::Relaxed) {
+                            continue;
+                        }
                         // Status detection tap — process before emitting
                         {
                             let mut det = detector.lock().unwrap();
@@ -580,6 +598,7 @@ impl PtyPool {
         self.preview_lines.lock().unwrap().remove(id);
         self.activity_trackers.lock().unwrap().remove(id);
         self.command_queues.lock().unwrap().remove(id);
+        self.muted.lock().unwrap().remove(id);
         Ok(())
     }
 
@@ -595,6 +614,11 @@ impl PtyPool {
         cols: u16,
         app_handle: &AppHandle,
     ) -> Result<(), String> {
+        // Mute the reader thread so it doesn't emit ^D/exit events from the dying session
+        if let Some(flag) = self.muted.lock().unwrap().get(id) {
+            flag.store(true, Ordering::Relaxed);
+        }
+
         self.kill(id)?;
 
         // Pause to let the frontend process pty-exit and clear the terminal

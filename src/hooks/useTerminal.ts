@@ -199,10 +199,10 @@ export function useTerminal({
     let suppressUntil = 0;
 
     listen<string>(`pty-data-${sessionId}`, (event) => {
-      // Drop output from the dying session during restart
+      // Drop any straggling output during restart
       if (suppressUntil > 0) {
         if (Date.now() < suppressUntil) return;
-        suppressUntil = 0; // Grace period expired, accept new output
+        suppressUntil = 0;
       }
 
       pendingWrites.current++;
@@ -243,7 +243,7 @@ export function useTerminal({
     // Clear terminal and suppress old output during restart
     let unlistenRestart: UnlistenFn | null = null;
     listen(`pty-restart-${sessionId}`, () => {
-      suppressUntil = Date.now() + 500; // Suppress output for 500ms
+      suppressUntil = Date.now() + 500;
       term.clear();
       term.reset();
       // Re-fit and resize so the new session gets correct dimensions
@@ -262,6 +262,9 @@ export function useTerminal({
     const spawnTime = Date.now();
 
     listen(`pty-exit-${sessionId}`, () => {
+      // Don't show exit messages during restart
+      if (suppressUntil > 0 && Date.now() < suppressUntil) return;
+
       const aliveMs = Date.now() - spawnTime;
       if (aliveMs < 3000) {
         // Process exited almost immediately — likely command not found or crash
