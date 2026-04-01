@@ -597,8 +597,9 @@ impl PtyPool {
     ) -> Result<(), String> {
         self.kill(id)?;
 
-        // Brief pause to let the frontend process pty-exit before new output arrives
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // Pause to let the frontend process pty-exit and clear the terminal
+        // before new session output arrives
+        std::thread::sleep(std::time::Duration::from_millis(250));
 
         // Resolve effective agent config
         let effective_config = match tuning {

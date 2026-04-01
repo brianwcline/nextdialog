@@ -216,16 +216,29 @@ pub fn restart_pty_session(
         .get(&session.session_type)
         .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
 
-    // Teardown old hooks and tuning hooks before restart
+    // Signal frontend to clear the terminal buffer before new PTY output arrives
+    let _ = app_handle.emit(&format!("pty-restart-{id}"), ());
+
+    // Kill the old PTY first (pool.restart handles this internally),
+    // then teardown hooks AFTER so Claude Code can send SessionEnd hook
+    pool.restart(
+        &id,
+        &session_type,
+        &session.working_directory,
+        session.skip_permissions,
+        session.tuning.as_ref(),
+        rows.unwrap_or(24),
+        cols.unwrap_or(80),
+        &app_handle,
+    )?;
+
+    // Now teardown old hook server and tuning hooks (old PTY is dead, safe to remove)
     hook_manager.teardown_session(&id);
     if session.tuning.is_some() {
         let _ = hook_config::remove_tuning_hooks(&session.working_directory);
     }
 
-    // Signal frontend to clear the terminal buffer before new PTY output arrives
-    let _ = app_handle.emit(&format!("pty-restart-{id}"), ());
-
-    // Inject fresh tuning hooks and permissions for the restarted session
+    // Inject fresh tuning hooks and permissions for the new session
     if session_type.id == "claude-code" {
         if let Some(ref tuning) = session.tuning {
             if !tuning.hooks_config.is_empty() {
@@ -241,18 +254,7 @@ pub fn restart_pty_session(
         }
     }
 
-    pool.restart(
-        &id,
-        &session_type,
-        &session.working_directory,
-        session.skip_permissions,
-        session.tuning.as_ref(),
-        rows.unwrap_or(24),
-        cols.unwrap_or(80),
-        &app_handle,
-    )?;
-
-    // Set up fresh hooks for the restarted session
+    // Set up fresh hook server for the new session
     if session_type.id == "claude-code" && settings_manager.get().hooks_enabled {
         match hook_manager.setup_session(&id, &session.working_directory, &app_handle) {
             Ok(true) => {}
