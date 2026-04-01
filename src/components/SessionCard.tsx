@@ -97,6 +97,11 @@ export function SessionCard({
             ? annotation
             : statusLabels[session.status] ?? session.status}
         </span>
+        {session.tuning && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-100 text-violet-500 font-medium">
+            Tuned
+          </span>
+        )}
       </div>
 
       {/* Brand icon — top right */}

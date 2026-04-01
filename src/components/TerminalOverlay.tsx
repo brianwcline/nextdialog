@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TerminalPane, type TerminalPaneHandle } from "./TerminalPane";
 import { SessionTimeline } from "./SessionTimeline";
+import { TuningPanel } from "./TuningPanel";
 import { StatusDot } from "./StatusDot";
 import { trackEvent } from "../lib/telemetry";
 import type { Session } from "../lib/types";
@@ -40,6 +41,7 @@ export function TerminalOverlay({
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [tuningOpen, setTuningOpen] = useState(false);
   const paneRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
 
   const allTabs = [session, ...companions];
@@ -51,9 +53,12 @@ export function TerminalOverlay({
     }
   }, [allTabs, activeTabId, session.id]);
 
-  // Close timeline when overlay closes
+  // Close timeline and tuning when overlay closes
   useEffect(() => {
-    if (!isOpen) setTimelineOpen(false);
+    if (!isOpen) {
+      setTimelineOpen(false);
+      setTuningOpen(false);
+    }
   }, [isOpen]);
 
   // Track timeline usage
@@ -62,6 +67,13 @@ export function TerminalOverlay({
       trackEvent("timeline.opened", "timeline", undefined, activeSession.id);
     }
   }, [timelineOpen, activeSession.id]);
+
+  // Track tuning panel usage
+  useEffect(() => {
+    if (tuningOpen) {
+      trackEvent("tuning.opened", "tuning", { session_type: activeSession.session_type }, activeSession.id);
+    }
+  }, [tuningOpen, activeSession.id, activeSession.session_type]);
 
   // Compute menu position from button ref when menu opens, and dismiss on outside click
   useEffect(() => {
@@ -83,6 +95,10 @@ export function TerminalOverlay({
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (tuningOpen) {
+          setTuningOpen(false);
+          return;
+        }
         if (timelineOpen) {
           setTimelineOpen(false);
           return;
@@ -121,10 +137,17 @@ export function TerminalOverlay({
         return;
       }
 
-      // ⌘. → toggle timeline
+      // ⌘. → toggle timeline (closes tuning)
       if (e.metaKey && e.key === ".") {
         e.preventDefault();
-        setTimelineOpen((v) => !v);
+        setTimelineOpen((v) => { if (!v) setTuningOpen(false); return !v; });
+        return;
+      }
+
+      // ⌘, → toggle tuning panel (closes timeline)
+      if (e.metaKey && e.key === ",") {
+        e.preventDefault();
+        setTuningOpen((v) => { if (!v) setTimelineOpen(false); return !v; });
         return;
       }
 
@@ -160,7 +183,7 @@ export function TerminalOverlay({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose, onRestart, onPark, onEnd, showMenu, timelineOpen, session, companions, activeTabId, onAddCompanion, onRemoveCompanion]);
+  }, [isOpen, onClose, onRestart, onPark, onEnd, showMenu, timelineOpen, tuningOpen, session, companions, activeTabId, onAddCompanion, onRemoveCompanion]);
 
   // Drag-drop file handling — writes to active tab
   useEffect(() => {
@@ -256,10 +279,25 @@ export function TerminalOverlay({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Tune button */}
+            {activeSession.session_type !== "terminal" && (
+              <button
+                onClick={() => setTuningOpen((v) => { if (!v) setTimelineOpen(false); return !v; })}
+                className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                  tuningOpen
+                    ? "text-violet-300 bg-violet-500/20"
+                    : "text-slate-500 hover:text-slate-300 hover:bg-slate-700/50"
+                }`}
+                title="Session tuning (⌘,)"
+              >
+                Tune
+              </button>
+            )}
+
             {/* Catch me up button */}
             {showTimelineButton && (
               <button
-                onClick={() => setTimelineOpen((v) => !v)}
+                onClick={() => setTimelineOpen((v) => { if (!v) setTuningOpen(false); return !v; })}
                 className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                   timelineOpen
                     ? "text-slate-200 bg-slate-700/50"
@@ -414,6 +452,29 @@ export function TerminalOverlay({
               visible={tab.id === activeTabId && isOpen}
             />
           ))}
+
+          {/* Tuning panel — full overlay replacing terminal */}
+          <AnimatePresence>
+            {tuningOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 20 }}
+                transition={{ duration: 0.35, ease: [0.25, 0.8, 0.25, 1] }}
+                className="absolute inset-0 z-20 overflow-hidden"
+              >
+                <TuningPanel
+                  sessionId={activeSession.id}
+                  sessionType={activeSession.session_type}
+                  onDismiss={() => setTuningOpen(false)}
+                  onRestart={() => {
+                    setTuningOpen(false);
+                    onRestart(session.id);
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Timeline pull-down overlay — slides down over terminal */}
           <AnimatePresence>

@@ -195,7 +195,16 @@ export function useTerminal({
     let unlistenData: UnlistenFn | null = null;
     let unlistenExit: UnlistenFn | null = null;
 
+    // Suppress output during restart (between pty-restart and new session data)
+    let suppressUntil = 0;
+
     listen<string>(`pty-data-${sessionId}`, (event) => {
+      // Drop any straggling output during restart
+      if (suppressUntil > 0) {
+        if (Date.now() < suppressUntil) return;
+        suppressUntil = 0;
+      }
+
       pendingWrites.current++;
       const inGracePeriod = Date.now() < forceAutoScrollUntil.current;
       const shouldAutoScroll = isAtBottomRef.current || inGracePeriod;
@@ -231,11 +240,21 @@ export function useTerminal({
       unlistenData = fn;
     });
 
-    // Clear terminal when session is restarted (prevents cross-corruption)
+    // Clear terminal and suppress old output during restart
     let unlistenRestart: UnlistenFn | null = null;
     listen(`pty-restart-${sessionId}`, () => {
+      suppressUntil = Date.now() + 500;
       term.clear();
       term.reset();
+      // Re-fit and resize so the new session gets correct dimensions
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        invoke("resize_pty", {
+          id: sessionId,
+          rows: term.rows,
+          cols: term.cols,
+        }).catch(() => {});
+      });
     }).then((fn) => {
       unlistenRestart = fn;
     });
@@ -243,6 +262,9 @@ export function useTerminal({
     const spawnTime = Date.now();
 
     listen(`pty-exit-${sessionId}`, () => {
+      // Don't show exit messages during restart
+      if (suppressUntil > 0 && Date.now() < suppressUntil) return;
+
       const aliveMs = Date.now() - spawnTime;
       if (aliveMs < 3000) {
         // Process exited almost immediately — likely command not found or crash

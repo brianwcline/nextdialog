@@ -6,11 +6,16 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
+use crate::hooks::config as hook_config;
 use crate::hooks::manager::HookManager;
 use crate::pty::pool::PtyPool;
 use crate::session::config::{CreateSessionRequest, SessionConfig};
 use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
+use crate::session::tuning::SessionTuning;
+use crate::session::tuning_discovery;
+use crate::session::tuning_files;
+use crate::session::tuning_profiles::{TuningProfile, TuningProfileManager};
 use crate::session::types::{SessionType, SessionTypeManager};
 use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
@@ -118,12 +123,29 @@ pub fn spawn_pty_session(
         }
     }
 
+    // Inject tuning hooks and permissions into settings.local.json
+    if session_type.id == "claude-code" {
+        if let Some(ref tuning) = session.tuning {
+            if !tuning.hooks_config.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_hooks(&session.working_directory, &tuning.hooks_config) {
+                    eprintln!("[tuning] Failed to inject hooks for session {id}: {e}");
+                }
+            }
+            if !tuning.permission_rules.allow.is_empty() || !tuning.permission_rules.deny.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_permissions(&session.working_directory, &tuning.permission_rules) {
+                    eprintln!("[tuning] Failed to inject permissions for session {id}: {e}");
+                }
+            }
+        }
+    }
+
     pool.spawn(
         &id,
         &session_type,
         &session.working_directory,
         session.skip_permissions,
         session.initial_prompt.as_deref(),
+        session.tuning.as_ref(),
         rows.unwrap_or(24),
         cols.unwrap_or(80),
         &app_handle,
@@ -157,6 +179,15 @@ pub fn kill_pty_session(
     hook_manager: State<'_, HookManager>,
     id: String,
 ) -> Result<(), String> {
+    // Clean up tuning hooks/permissions before teardown
+    if let Some(session) = manager.get(&id) {
+        if session.tuning.is_some() {
+            if let Err(e) = hook_config::remove_tuning_hooks(&session.working_directory) {
+                eprintln!("[tuning] Failed to remove hooks for session {id}: {e}");
+            }
+        }
+    }
+
     pool.kill(&id)?;
     file_tracker.unregister_session(&id);
     hook_manager.teardown_session(&id);
@@ -185,23 +216,45 @@ pub fn restart_pty_session(
         .get(&session.session_type)
         .unwrap_or_else(|| type_manager.get("claude-code").unwrap());
 
-    // Teardown old hooks before restart
-    hook_manager.teardown_session(&id);
-
     // Signal frontend to clear the terminal buffer before new PTY output arrives
     let _ = app_handle.emit(&format!("pty-restart-{id}"), ());
 
+    // Kill the old PTY first (pool.restart handles this internally),
+    // then teardown hooks AFTER so Claude Code can send SessionEnd hook
     pool.restart(
         &id,
         &session_type,
         &session.working_directory,
         session.skip_permissions,
+        session.tuning.as_ref(),
         rows.unwrap_or(24),
         cols.unwrap_or(80),
         &app_handle,
     )?;
 
-    // Set up fresh hooks for the restarted session
+    // Now teardown old hook server and tuning hooks (old PTY is dead, safe to remove)
+    hook_manager.teardown_session(&id);
+    if session.tuning.is_some() {
+        let _ = hook_config::remove_tuning_hooks(&session.working_directory);
+    }
+
+    // Inject fresh tuning hooks and permissions for the new session
+    if session_type.id == "claude-code" {
+        if let Some(ref tuning) = session.tuning {
+            if !tuning.hooks_config.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_hooks(&session.working_directory, &tuning.hooks_config) {
+                    eprintln!("[tuning] Failed to inject hooks for restarted session {id}: {e}");
+                }
+            }
+            if !tuning.permission_rules.allow.is_empty() || !tuning.permission_rules.deny.is_empty() {
+                if let Err(e) = hook_config::inject_tuning_permissions(&session.working_directory, &tuning.permission_rules) {
+                    eprintln!("[tuning] Failed to inject permissions for restarted session {id}: {e}");
+                }
+            }
+        }
+    }
+
+    // Set up fresh hook server for the new session
     if session_type.id == "claude-code" && settings_manager.get().hooks_enabled {
         match hook_manager.setup_session(&id, &session.working_directory, &app_handle) {
             Ok(true) => {}
@@ -434,6 +487,145 @@ pub fn get_background_image_data(
         _ => "image/jpeg",
     };
     Some(format!("data:{};base64,{}", mime, BASE64.encode(&data)))
+}
+
+// ── Session Tuning ──
+
+#[tauri::command]
+pub fn update_session_tuning(
+    manager: State<'_, SessionManager>,
+    id: String,
+    tuning: Option<SessionTuning>,
+) -> Result<(), String> {
+    manager.update_tuning(&id, tuning)
+}
+
+#[tauri::command]
+pub fn get_session_tuning(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Option<SessionTuning> {
+    manager.get_tuning(&id)
+}
+
+// ── Tuning File Management ──
+
+#[tauri::command]
+pub fn install_tuning_files(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Result<Vec<String>, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    let tuning = session.tuning.ok_or("No tuning configured")?;
+    tuning_files::install_files(&session.working_directory, &tuning.file_configs)
+}
+
+#[tauri::command]
+pub fn uninstall_tuning_file(
+    manager: State<'_, SessionManager>,
+    id: String,
+    relative_path: String,
+) -> Result<bool, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    tuning_files::uninstall_file(&session.working_directory, &relative_path)
+}
+
+#[tauri::command]
+pub fn uninstall_all_tuning_files(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Result<Vec<String>, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    let tuning = session.tuning.ok_or("No tuning configured")?;
+    tuning_files::uninstall_all(&session.working_directory, &tuning.file_configs)
+}
+
+#[tauri::command]
+pub fn get_tuning_install_status(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Vec<tuning_files::FileInstallStatus> {
+    let session = match manager.get(&id) {
+        Some(s) => s,
+        None => return vec![],
+    };
+    let tuning = match session.tuning {
+        Some(t) => t,
+        None => return vec![],
+    };
+    tuning_files::get_install_status(&session.working_directory, &tuning.file_configs)
+}
+
+// ── Tuning Discovery ──
+
+#[tauri::command]
+pub fn scan_project_configs(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Vec<tuning_discovery::DiscoveredConfig> {
+    match manager.get(&id) {
+        Some(session) => tuning_discovery::scan_project_configs(&session.working_directory),
+        None => vec![],
+    }
+}
+
+#[tauri::command]
+pub fn read_project_file(
+    manager: State<'_, SessionManager>,
+    id: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    let path = std::path::Path::new(&session.working_directory).join(&relative_path);
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {}: {e}", path.display()))
+}
+
+// ── Tuning Profiles ──
+
+#[tauri::command]
+pub fn list_tuning_profiles(
+    manager: State<'_, TuningProfileManager>,
+    agent_type: Option<String>,
+) -> Vec<TuningProfile> {
+    manager.list(agent_type.as_deref())
+}
+
+#[tauri::command]
+pub fn create_tuning_profile(
+    manager: State<'_, TuningProfileManager>,
+    name: String,
+    description: Option<String>,
+    agent_type: String,
+    tuning: SessionTuning,
+    tags: Option<Vec<String>>,
+) -> TuningProfile {
+    manager.create(name, description, agent_type, tuning, tags.unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn update_tuning_profile(
+    manager: State<'_, TuningProfileManager>,
+    id: String,
+    profile: TuningProfile,
+) -> Result<TuningProfile, String> {
+    manager.update(&id, profile)
+}
+
+#[tauri::command]
+pub fn delete_tuning_profile(
+    manager: State<'_, TuningProfileManager>,
+    id: String,
+) -> Result<(), String> {
+    manager.delete(&id)
 }
 
 // ── Diagnostics ──

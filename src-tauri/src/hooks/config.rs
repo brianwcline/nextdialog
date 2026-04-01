@@ -131,6 +131,204 @@ pub fn remove_hook_config(working_dir: &str, port: Option<u16>) -> Result<(), St
     Ok(())
 }
 
+/// Inject tuning hooks from SessionTuning.hooks_config into settings.local.json.
+/// Each hook is tagged with `_nextdialog_tuning: true` for identification.
+pub fn inject_tuning_hooks(
+    working_dir: &str,
+    hooks: &[crate::session::tuning::HookEntry],
+) -> Result<(), String> {
+    if hooks.is_empty() {
+        return Ok(());
+    }
+
+    let settings_path = claude_settings_path(working_dir);
+
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create .claude directory: {e}"))?;
+    }
+
+    let mut root: serde_json::Map<String, serde_json::Value> = if settings_path.exists() {
+        let data = fs::read_to_string(&settings_path)
+            .map_err(|e| format!("Failed to read settings.local.json: {e}"))?;
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        serde_json::Map::new()
+    };
+
+    let hooks_obj = root
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}));
+    let hooks_map = hooks_obj
+        .as_object_mut()
+        .ok_or("hooks field is not an object")?;
+
+    // First remove any existing tuning hooks (idempotent re-inject)
+    for (_event, matchers) in hooks_map.iter_mut() {
+        if let Some(arr) = matchers.as_array_mut() {
+            arr.retain(|m| !is_tuning_managed(m));
+        }
+    }
+
+    // Add each tuning hook
+    for entry in hooks {
+        let mut hook_json = serde_json::json!({
+            "type": entry.hook_type,
+            "_nextdialog_tuning": true
+        });
+
+        // Set type-specific payload field
+        match entry.hook_type.as_str() {
+            "http" => { hook_json["url"] = serde_json::json!(entry.command); }
+            "prompt" | "agent" => { hook_json["prompt"] = serde_json::json!(entry.command); }
+            _ => { hook_json["command"] = serde_json::json!(entry.command); }
+        }
+
+        if let Some(ref cond) = entry.if_condition {
+            hook_json["if"] = serde_json::json!(cond);
+        }
+        if let Some(timeout) = entry.timeout {
+            hook_json["timeout"] = serde_json::json!(timeout);
+        }
+        if entry.async_mode {
+            hook_json["async"] = serde_json::json!(true);
+        }
+        if entry.once {
+            hook_json["once"] = serde_json::json!(true);
+        }
+        if let Some(ref model) = entry.model {
+            hook_json["model"] = serde_json::json!(model);
+        }
+
+        let matcher_json = serde_json::json!({
+            "matcher": entry.matcher.as_deref().unwrap_or(""),
+            "hooks": [hook_json]
+        });
+
+        let matchers = hooks_map
+            .entry(&entry.event)
+            .or_insert_with(|| serde_json::json!([]));
+        if let Some(arr) = matchers.as_array_mut() {
+            arr.push(matcher_json);
+        }
+    }
+
+    // Clean up empty arrays
+    hooks_map.retain(|_, v| v.as_array().map(|a| !a.is_empty()).unwrap_or(true));
+
+    let data = serde_json::to_string_pretty(&root)
+        .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+    fs::write(&settings_path, data)
+        .map_err(|e| format!("Failed to write settings.local.json: {e}"))?;
+
+    Ok(())
+}
+
+/// Remove tuning-managed hook entries from settings.local.json.
+pub fn remove_tuning_hooks(working_dir: &str) -> Result<(), String> {
+    let settings_path = claude_settings_path(working_dir);
+    if !settings_path.exists() {
+        return Ok(());
+    }
+
+    let data = fs::read_to_string(&settings_path)
+        .map_err(|e| format!("Failed to read settings.local.json: {e}"))?;
+    let mut root: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&data).unwrap_or_default();
+
+    if let Some(hooks_obj) = root.get_mut("hooks") {
+        if let Some(hooks_map) = hooks_obj.as_object_mut() {
+            for (_event, matchers) in hooks_map.iter_mut() {
+                if let Some(arr) = matchers.as_array_mut() {
+                    arr.retain(|m| !is_tuning_managed(m));
+                }
+            }
+            hooks_map.retain(|_, v| v.as_array().map(|a| !a.is_empty()).unwrap_or(true));
+            if hooks_map.is_empty() {
+                root.remove("hooks");
+            }
+        }
+    }
+
+    // Also remove tuning permission rules
+    if let Some(perms) = root.get("permissions") {
+        if let Some(obj) = perms.as_object() {
+            if obj.get("_nextdialog_tuning").and_then(|v| v.as_bool()).unwrap_or(false) {
+                root.remove("permissions");
+            }
+        }
+    }
+
+    if root.is_empty() {
+        let _ = fs::remove_file(&settings_path);
+    } else {
+        let data = serde_json::to_string_pretty(&root)
+            .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+        fs::write(&settings_path, data)
+            .map_err(|e| format!("Failed to write settings.local.json: {e}"))?;
+    }
+
+    Ok(())
+}
+
+/// Inject tuning permission rules into settings.local.json.
+pub fn inject_tuning_permissions(
+    working_dir: &str,
+    rules: &crate::session::tuning::PermissionRules,
+) -> Result<(), String> {
+    if rules.allow.is_empty() && rules.deny.is_empty() {
+        return Ok(());
+    }
+
+    let settings_path = claude_settings_path(working_dir);
+    if let Some(parent) = settings_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create .claude directory: {e}"))?;
+    }
+
+    let mut root: serde_json::Map<String, serde_json::Value> = if settings_path.exists() {
+        let data = fs::read_to_string(&settings_path)
+            .map_err(|e| format!("Failed to read settings.local.json: {e}"))?;
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        serde_json::Map::new()
+    };
+
+    let mut perms = serde_json::Map::new();
+    perms.insert("_nextdialog_tuning".to_string(), serde_json::json!(true));
+
+    if !rules.allow.is_empty() {
+        perms.insert("allow".to_string(), serde_json::json!(rules.allow));
+    }
+    if !rules.deny.is_empty() {
+        perms.insert("deny".to_string(), serde_json::json!(rules.deny));
+    }
+
+    root.insert("permissions".to_string(), serde_json::Value::Object(perms));
+
+    let data = serde_json::to_string_pretty(&root)
+        .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+    fs::write(&settings_path, data)
+        .map_err(|e| format!("Failed to write settings.local.json: {e}"))?;
+
+    Ok(())
+}
+
+/// Check if a matcher contains a tuning-managed hook.
+fn is_tuning_managed(matcher: &serde_json::Value) -> bool {
+    matcher
+        .get("hooks")
+        .and_then(|h| h.as_array())
+        .map(|hooks| {
+            hooks.iter().any(|h| {
+                h.get("_nextdialog_tuning")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
 /// Check if a matcher has a managed hook targeting a specific port.
 fn is_managed_by_port(matcher: &serde_json::Value, port: u16) -> bool {
     let prefix = format!("http://127.0.0.1:{port}/hook/");
