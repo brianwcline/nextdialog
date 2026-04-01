@@ -419,15 +419,14 @@ function CustomHookCard({
           />
           once
         </label>
-        {hook.if_condition !== undefined && (
-          <input
-            type="text"
-            value={hook.if_condition ?? ""}
-            onChange={(e) => onChange({ if_condition: e.target.value || null })}
-            placeholder="if: Bash(git *)"
-            className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-0.5 text-[10px] text-slate-500 font-mono placeholder-slate-700 focus:outline-none focus:border-violet-500/50"
-          />
-        )}
+        <input
+          type="text"
+          value={hook.if_condition ?? ""}
+          onChange={(e) => onChange({ if_condition: e.target.value || null })}
+          placeholder="if: Bash(git *)"
+          title="Only fire when this condition matches (permission rule syntax)"
+          className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2 py-0.5 text-[10px] text-slate-500 font-mono placeholder-slate-700 focus:outline-none focus:border-violet-500/50"
+        />
       </div>
     </div>
   );

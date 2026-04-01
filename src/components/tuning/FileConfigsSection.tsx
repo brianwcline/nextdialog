@@ -17,14 +17,14 @@ const CLAUDE_KINDS: FileKindOption[] = [
     kind: "Command",
     label: "Command",
     pathTemplate: ".claude/commands/{name}.md",
-    placeholder: "---\ndescription: Describe what this command does\nallowed-tools: Bash, Read, Edit, Write\n---\n\n# Command prompt here\n",
+    placeholder: "---\ndescription: Describe what this command does\nallowed-tools: Bash, Read, Edit, Write\neffort: high\n---\n\n# Command prompt here\n",
     description: "Slash command (.claude/commands/)",
   },
   {
     kind: "Agent",
     label: "Agent",
     pathTemplate: ".claude/agents/{name}.md",
-    placeholder: "---\nname: agent-name\ndescription: What this agent does\nmodel: opus\ntools: [Read, Write, Edit, Bash, Grep, Glob]\nmaxTurns: 10\n---\n\n# Agent system prompt here\n",
+    placeholder: "---\nname: agent-name\ndescription: What this agent does\nmodel: opus\ntools: [Read, Write, Edit, Bash, Grep, Glob]\nmaxTurns: 10\ninitialPrompt: Start by reviewing the codebase\n---\n\n# Agent system prompt here\n",
     description: "Subagent definition (.claude/agents/)",
   },
   {

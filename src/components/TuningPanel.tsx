@@ -301,6 +301,13 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                   baselineValue={CLAUDE_DEFAULTS.worktree}
                   onChange={(v) => handleOverride("worktree", v)}
                 />
+                <BoolToggle
+                  label="Bare"
+                  hint="Fast startup, skip plugins/hooks/LSP"
+                  value={overrides.bare ?? null}
+                  baselineValue={null}
+                  onChange={(v) => handleOverride("bare", v)}
+                />
               </div>
             </div>
           </section>

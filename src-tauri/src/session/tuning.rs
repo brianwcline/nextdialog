@@ -93,6 +93,10 @@ pub struct AgentConfigOverrides {
     #[serde(default)]
     pub worktree: Option<bool>,
 
+    /// Bare mode — skip hooks, LSP, plugins, skills on startup (--bare)
+    #[serde(default)]
+    pub bare: Option<bool>,
+
     /// Raw custom CLI args (escape hatch)
     #[serde(default)]
     pub custom_args: Option<Vec<String>>,
@@ -256,6 +260,10 @@ pub fn extra_args_from_overrides(overrides: &AgentConfigOverrides) -> Vec<String
 
     if overrides.worktree == Some(true) {
         args.push("--worktree".to_string());
+    }
+
+    if overrides.bare == Some(true) {
+        args.push("--bare".to_string());
     }
 
     args

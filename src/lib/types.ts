@@ -99,6 +99,7 @@ export interface AgentConfigOverrides {
   additional_dirs?: string[] | null;
   agent?: string | null;
   worktree?: boolean | null;
+  bare?: boolean | null;
   custom_args?: string[] | null;
   custom_env?: Record<string, string> | null;
 }
