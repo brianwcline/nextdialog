@@ -195,7 +195,16 @@ export function useTerminal({
     let unlistenData: UnlistenFn | null = null;
     let unlistenExit: UnlistenFn | null = null;
 
+    // Suppress output during restart (between pty-restart and new session data)
+    let suppressUntil = 0;
+
     listen<string>(`pty-data-${sessionId}`, (event) => {
+      // Drop output from the dying session during restart
+      if (suppressUntil > 0) {
+        if (Date.now() < suppressUntil) return;
+        suppressUntil = 0; // Grace period expired, accept new output
+      }
+
       pendingWrites.current++;
       const inGracePeriod = Date.now() < forceAutoScrollUntil.current;
       const shouldAutoScroll = isAtBottomRef.current || inGracePeriod;
@@ -231,11 +240,21 @@ export function useTerminal({
       unlistenData = fn;
     });
 
-    // Clear terminal when session is restarted (prevents cross-corruption)
+    // Clear terminal and suppress old output during restart
     let unlistenRestart: UnlistenFn | null = null;
     listen(`pty-restart-${sessionId}`, () => {
+      suppressUntil = Date.now() + 500; // Suppress output for 500ms
       term.clear();
       term.reset();
+      // Re-fit and resize so the new session gets correct dimensions
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        invoke("resize_pty", {
+          id: sessionId,
+          rows: term.rows,
+          cols: term.cols,
+        }).catch(() => {});
+      });
     }).then((fn) => {
       unlistenRestart = fn;
     });
