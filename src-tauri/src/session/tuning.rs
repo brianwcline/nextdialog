@@ -97,6 +97,10 @@ pub struct AgentConfigOverrides {
     #[serde(default)]
     pub bare: Option<bool>,
 
+    /// Reduce terminal flicker (CLAUDE_CODE_NO_FLICKER env var)
+    #[serde(default)]
+    pub no_flicker: Option<bool>,
+
     /// Raw custom CLI args (escape hatch)
     #[serde(default)]
     pub custom_args: Option<Vec<String>>,
@@ -267,6 +271,13 @@ pub fn extra_args_from_overrides(overrides: &AgentConfigOverrides) -> Vec<String
     }
 
     args
+}
+
+/// Apply env-var-based overrides to a command builder.
+pub fn apply_env_overrides(cmd: &mut portable_pty::CommandBuilder, overrides: &AgentConfigOverrides) {
+    if overrides.no_flicker == Some(true) {
+        cmd.env("CLAUDE_CODE_NO_FLICKER", "1");
+    }
 }
 
 #[cfg(test)]

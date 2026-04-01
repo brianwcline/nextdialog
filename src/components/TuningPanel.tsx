@@ -287,6 +287,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <BoolToggle label="Verbose" hint="Detailed output" value={overrides.verbose ?? null} baselineValue={baseline?.verbose ?? CLAUDE_DEFAULTS.verbose} onChange={(v) => handleOverride("verbose", v)} />
                 <BoolToggle label="Worktree" hint="Git isolation" value={overrides.worktree ?? null} baselineValue={CLAUDE_DEFAULTS.worktree} onChange={(v) => handleOverride("worktree", v)} />
                 <BoolToggle label="Bare" hint="Fast startup, skip plugins/hooks/LSP" value={overrides.bare ?? null} baselineValue={null} onChange={(v) => handleOverride("bare", v)} />
+                <BoolToggle label="No Flicker" hint="Reduce terminal rendering flicker" value={overrides.no_flicker ?? null} baselineValue={null} onChange={(v) => handleOverride("no_flicker", v)} />
               </div>
             </div>
           )}

@@ -426,11 +426,12 @@ impl PtyPool {
         // Apply resolved agent configuration
         apply_agent_config(&mut cmd, &session_type.id, &effective_config);
 
-        // Apply extra args from tuning overrides (effort, thinking, agent, worktree)
+        // Apply extra args and env vars from tuning overrides
         if let Some(t) = tuning {
             for arg in tuning::extra_args_from_overrides(&t.config_overrides) {
                 cmd.arg(arg);
             }
+            tuning::apply_env_overrides(&mut cmd, &t.config_overrides);
         }
 
         cmd.cwd(cwd);
