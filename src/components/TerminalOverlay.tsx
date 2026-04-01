@@ -68,6 +68,13 @@ export function TerminalOverlay({
     }
   }, [timelineOpen, activeSession.id]);
 
+  // Track tuning panel usage
+  useEffect(() => {
+    if (tuningOpen) {
+      trackEvent("tuning.opened", "tuning", { session_type: activeSession.session_type }, activeSession.id);
+    }
+  }, [tuningOpen, activeSession.id, activeSession.session_type]);
+
   // Compute menu position from button ref when menu opens, and dismiss on outside click
   useEffect(() => {
     if (showMenu && menuBtnRef.current) {

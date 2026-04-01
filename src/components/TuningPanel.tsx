@@ -4,6 +4,7 @@ import { useProfiles } from "../hooks/useProfiles";
 import { HooksSection } from "./tuning/HooksSection";
 import { PermissionsSection } from "./tuning/PermissionsSection";
 import { FileConfigsSection, getFileKindsForAgent } from "./tuning/FileConfigsSection";
+import { trackEvent } from "../lib/telemetry";
 import type { AgentConfigOverrides, SessionTuning } from "../lib/types";
 
 interface TuningPanelProps {
@@ -71,8 +72,9 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
     async (key: keyof AgentConfigOverrides, value: unknown) => {
       await updateOverrides({ [key]: value });
       setDirty(true);
+      trackEvent("tuning.override_changed", "tuning", { key, value: String(value ?? "cleared"), session_type: sessionType }, sessionId);
     },
-    [updateOverrides],
+    [updateOverrides, sessionId, sessionType],
   );
 
   const handleAddCommand = useCallback(async () => {
@@ -80,7 +82,8 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
     if (!trimmed) return;
     await updateStartupCommands([...startupCommands, trimmed]);
     setNewCommand("");
-  }, [newCommand, startupCommands, updateStartupCommands]);
+    trackEvent("tuning.startup_command_added", "tuning", { command: trimmed, session_type: sessionType }, sessionId);
+  }, [newCommand, startupCommands, updateStartupCommands, sessionId, sessionType]);
 
   const handleRemoveCommand = useCallback(
     async (index: number) => {
@@ -92,22 +95,25 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
   const handleClear = useCallback(async () => {
     await clearTuning();
     setDirty(false);
-  }, [clearTuning]);
+    trackEvent("tuning.cleared", "tuning", { session_type: sessionType }, sessionId);
+  }, [clearTuning, sessionId, sessionType]);
 
   const handleSaveProfile = useCallback(async () => {
     if (!profileName.trim() || !tuning) return;
     await saveProfile(profileName.trim(), tuning);
     setProfileName("");
     setShowSaveDialog(false);
-  }, [profileName, tuning, saveProfile]);
+    trackEvent("tuning.profile_saved", "tuning", { session_type: sessionType, profile_name: profileName.trim() }, sessionId);
+  }, [profileName, tuning, saveProfile, sessionId, sessionType]);
 
   const handleLoadProfile = useCallback(
     async (profileTuning: SessionTuning) => {
       await saveTuning(profileTuning);
       setDirty(true);
       setShowProfileMenu(false);
+      trackEvent("tuning.profile_loaded", "tuning", { session_type: sessionType }, sessionId);
     },
-    [saveTuning],
+    [saveTuning, sessionId, sessionType],
   );
 
   if (loading) {
@@ -352,7 +358,10 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
           >
             <HooksSection
               hooks={hooksConfig}
-              onUpdate={(hooks) => { updateHooks(hooks); setDirty(true); }}
+              onUpdate={(hooks) => {
+                updateHooks(hooks); setDirty(true);
+                trackEvent("tuning.hooks_changed", "tuning", { count: hooks.length, session_type: sessionType }, sessionId);
+              }}
             />
           </CollapsibleSection>
         )}
@@ -366,7 +375,10 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
           >
             <PermissionsSection
               rules={permissionRules}
-              onUpdate={(rules) => { updatePermissions(rules); setDirty(true); }}
+              onUpdate={(rules) => {
+                updatePermissions(rules); setDirty(true);
+                trackEvent("tuning.permissions_changed", "tuning", { allow_count: rules.allow.length, deny_count: rules.deny.length, session_type: sessionType }, sessionId);
+              }}
             />
           </CollapsibleSection>
         )}
@@ -382,7 +394,10 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
               sessionId={sessionId}
               sessionType={sessionType}
               files={fileConfigs}
-              onUpdate={(files) => { updateFileConfigs(files); setDirty(true); }}
+              onUpdate={(files) => {
+                updateFileConfigs(files); setDirty(true);
+                trackEvent("tuning.files_changed", "tuning", { count: files.length, session_type: sessionType }, sessionId);
+              }}
             />
           </CollapsibleSection>
         )}
@@ -473,7 +488,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
         </span>
         {dirty && (
           <button
-            onClick={() => { onRestart(); setDirty(false); }}
+            onClick={() => { onRestart(); setDirty(false); trackEvent("tuning.applied_restart", "tuning", { session_type: sessionType }, sessionId); }}
             className="px-3 py-1.5 rounded-md text-xs bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors"
           >
             Apply & Restart

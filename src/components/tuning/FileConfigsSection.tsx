@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { trackEvent } from "../../lib/telemetry";
 import type { FileConfig, FileConfigKind } from "../../lib/types";
 
 // ── Agent-aware file kinds ──
@@ -182,13 +183,13 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
   const handleInstall = useCallback(async () => {
     try {
       await invoke("install_tuning_files", { id: sessionId });
-      // Refresh status
       const status = await invoke<FileInstallStatus[]>("get_tuning_install_status", { id: sessionId });
       setInstallStatus(status);
+      trackEvent("tuning.files_installed", "tuning", { count: files.length, session_type: sessionType }, sessionId);
     } catch (e) {
       console.error("Install failed:", e);
     }
-  }, [sessionId]);
+  }, [sessionId, sessionType, files.length]);
 
   // Uninstall a single file
   const handleUninstall = useCallback(
@@ -197,11 +198,12 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
         await invoke("uninstall_tuning_file", { id: sessionId, relativePath });
         const status = await invoke<FileInstallStatus[]>("get_tuning_install_status", { id: sessionId });
         setInstallStatus(status);
+        trackEvent("tuning.file_uninstalled", "tuning", { path: relativePath, session_type: sessionType }, sessionId);
       } catch (e) {
         console.error("Uninstall failed:", e);
       }
     },
-    [sessionId],
+    [sessionId, sessionType],
   );
 
   if (kinds.length === 0) return null;
