@@ -57,6 +57,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("hooks");
 
   const overrides = tuning?.config_overrides ?? {};
   const startupCommands = tuning?.startup_commands ?? [];
@@ -238,16 +239,12 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
         </div>
       )}
 
-      {/* Body — scrollable */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+      {/* Body */}
+      <div className="flex-1 flex flex-col min-h-0">
 
-        {/* Quick Toggles — Claude Code */}
-        {isClaude && (
-          <section>
-            <SectionHeader
-              title="Quick Toggles"
-              subtitle="Override model, effort, and behavior for this session"
-            />
+        {/* Quick Toggles — always visible */}
+        <div className="px-5 py-4 border-b border-slate-700/30">
+          {isClaude && (
             <div className="space-y-3">
               <ToggleRow label="Model" hint="Which Claude model to use">
                 <ButtonGroup
@@ -286,199 +283,188 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
               </ToggleRow>
 
               <div className="flex items-center gap-4">
-                <BoolToggle
-                  label="Chrome"
-                  hint="Browser integration"
-                  value={overrides.chrome_enabled ?? null}
-                  baselineValue={baseline?.chrome_enabled ?? CLAUDE_DEFAULTS.chrome_enabled}
-                  onChange={(v) => handleOverride("chrome_enabled", v)}
-                />
-                <BoolToggle
-                  label="Verbose"
-                  hint="Detailed output"
-                  value={overrides.verbose ?? null}
-                  baselineValue={baseline?.verbose ?? CLAUDE_DEFAULTS.verbose}
-                  onChange={(v) => handleOverride("verbose", v)}
-                />
-                <BoolToggle
-                  label="Worktree"
-                  hint="Git isolation"
-                  value={overrides.worktree ?? null}
-                  baselineValue={CLAUDE_DEFAULTS.worktree}
-                  onChange={(v) => handleOverride("worktree", v)}
-                />
-                <BoolToggle
-                  label="Bare"
-                  hint="Fast startup, skip plugins/hooks/LSP"
-                  value={overrides.bare ?? null}
-                  baselineValue={null}
-                  onChange={(v) => handleOverride("bare", v)}
-                />
+                <BoolToggle label="Chrome" hint="Browser integration" value={overrides.chrome_enabled ?? null} baselineValue={baseline?.chrome_enabled ?? CLAUDE_DEFAULTS.chrome_enabled} onChange={(v) => handleOverride("chrome_enabled", v)} />
+                <BoolToggle label="Verbose" hint="Detailed output" value={overrides.verbose ?? null} baselineValue={baseline?.verbose ?? CLAUDE_DEFAULTS.verbose} onChange={(v) => handleOverride("verbose", v)} />
+                <BoolToggle label="Worktree" hint="Git isolation" value={overrides.worktree ?? null} baselineValue={CLAUDE_DEFAULTS.worktree} onChange={(v) => handleOverride("worktree", v)} />
+                <BoolToggle label="Bare" hint="Fast startup, skip plugins/hooks/LSP" value={overrides.bare ?? null} baselineValue={null} onChange={(v) => handleOverride("bare", v)} />
               </div>
             </div>
-          </section>
-        )}
-
-        {/* Quick Toggles — Cursor */}
-        {isCursor && (
-          <section>
-            <SectionHeader
-              title="Quick Toggles"
-              subtitle="Cursor Agent configuration"
-            />
+          )}
+          {isCursor && (
             <div className="text-xs text-slate-500">
-              Add rules, skills, and hooks via the Files section below.
+              Configure Cursor Agent via the tabs below.
             </div>
-          </section>
-        )}
+          )}
+        </div>
 
-        {/* System Prompt (Claude only) */}
-        {isClaude && (
-          <CollapsibleSection
-            title="System Prompt"
-            subtitle="Extra instructions appended to Claude's system prompt"
-            defaultOpen={!!overrides.append_system_prompt}
-          >
-            <textarea
-              value={overrides.append_system_prompt ?? ""}
-              onChange={(e) => handleOverride("append_system_prompt", e.target.value || null)}
-              placeholder="e.g., Always explain your reasoning. Use TypeScript strict mode. Follow the existing patterns in this codebase."
-              rows={4}
-              className="w-full bg-[#141422] border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-600 resize-y focus:outline-none focus:border-violet-500/50"
-            />
-          </CollapsibleSection>
-        )}
-
-        {/* Hooks (Claude only) */}
-        {isClaude && (
-          <CollapsibleSection
-            title="Hooks"
-            subtitle="Auto-run scripts when Claude writes, edits, or stops"
-            defaultOpen={hooksConfig.length > 0}
-          >
-            <HooksSection
-              hooks={hooksConfig}
-              onUpdate={(hooks) => {
-                updateHooks(hooks); setDirty(true);
-                trackEvent("tuning.hooks_changed", "tuning", { count: hooks.length, session_type: sessionType }, sessionId);
-              }}
-            />
-          </CollapsibleSection>
-        )}
-
-        {/* Permissions (Claude only) */}
-        {isClaude && (
-          <CollapsibleSection
-            title="Permissions"
-            subtitle="Auto-approve or block specific commands and actions"
-            defaultOpen={permissionRules.allow.length > 0 || permissionRules.deny.length > 0}
-          >
-            <PermissionsSection
-              rules={permissionRules}
-              onUpdate={(rules) => {
-                updatePermissions(rules); setDirty(true);
-                trackEvent("tuning.permissions_changed", "tuning", { allow_count: rules.allow.length, deny_count: rules.deny.length, session_type: sessionType }, sessionId);
-              }}
-            />
-          </CollapsibleSection>
-        )}
-
-        {/* File Configs (agent-aware) */}
-        {hasFileKinds && (
-          <CollapsibleSection
-            title="Files"
-            subtitle="Install commands, agents, skills, and context files to the project"
-            defaultOpen={fileConfigs.length > 0}
-          >
-            <FileConfigsSection
-              sessionId={sessionId}
-              sessionType={sessionType}
-              files={fileConfigs}
-              onUpdate={(files) => {
-                updateFileConfigs(files); setDirty(true);
-                trackEvent("tuning.files_changed", "tuning", { count: files.length, session_type: sessionType }, sessionId);
-              }}
-            />
-          </CollapsibleSection>
-        )}
-
-        {/* Startup Commands */}
-        <CollapsibleSection
-          title="Startup Commands"
-          subtitle="Slash commands typed into the session after the agent is ready"
-          defaultOpen={startupCommands.length > 0}
-        >
-          <div className="space-y-2">
-            {startupCommands.map((cmd, i) => (
-              <div key={i} className="flex items-center gap-2 group">
-                <span className="flex-1 text-xs font-mono text-slate-400 bg-[#141422] rounded px-2.5 py-1.5 border border-slate-700/30">
-                  {cmd}
+        {/* Tab bar */}
+        <div className="flex items-center gap-1 px-5 pt-3 pb-0 border-b border-slate-700/30">
+          {(isClaude
+            ? getTabsForClaude(hooksConfig.length, permissionRules.allow.length + permissionRules.deny.length, fileConfigs.length, startupCommands.length + (overrides.append_system_prompt ? 1 : 0))
+            : isCursor
+              ? getTabsForCursor(fileConfigs.length, startupCommands.length)
+              : sessionType === "gemini-cli"
+                ? getTabsForGemini(fileConfigs.length, startupCommands.length)
+                : getTabsGeneric(startupCommands.length)
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 text-[11px] rounded-t-md transition-colors ${
+                activeTab === tab.id
+                  ? "text-violet-300 bg-[#141422] border border-slate-700/30 border-b-transparent -mb-px"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span className="ml-1.5 px-1 py-0 rounded text-[9px] bg-violet-500/20 text-violet-400">
+                  {tab.count}
                 </span>
-                <button
-                  onClick={() => handleRemoveCommand(i)}
-                  className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all text-xs"
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newCommand}
-                onChange={(e) => setNewCommand(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddCommand()}
-                placeholder="/loop 5m /run-tests"
-                className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 font-mono focus:outline-none focus:border-violet-500/50"
-              />
-              <button
-                onClick={handleAddCommand}
-                disabled={!newCommand.trim()}
-                className="px-2.5 py-1.5 rounded text-xs bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                Add
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-600">
-              Typed into the session after the agent signals ready.
-            </p>
-          </div>
-        </CollapsibleSection>
+              )}
+            </button>
+          ))}
+        </div>
 
-        {/* Advanced */}
-        <CollapsibleSection title="Advanced" subtitle="Max turns, MCP config, custom CLI arguments">
-          <div className="space-y-3">
-            {isClaude && (
-              <>
-                <TextInput
-                  label="Max Turns"
-                  type="number"
-                  value={overrides.max_turns?.toString() ?? ""}
-                  onChange={(v) => handleOverride("max_turns", v ? parseInt(v) : null)}
-                  placeholder="No limit"
-                />
-                <TextInput
-                  label="MCP Config Path"
-                  value={overrides.mcp_config_path ?? ""}
-                  onChange={(v) => handleOverride("mcp_config_path", v || null)}
-                  placeholder="/path/to/mcp.json"
-                />
-                <TextInput
-                  label="Main Thread Agent"
-                  value={overrides.agent ?? ""}
-                  onChange={(v) => handleOverride("agent", v || null)}
-                  placeholder="agent-name (from .claude/agents/)"
-                />
-              </>
-            )}
-            <TextInput
-              label="Custom CLI Args"
-              value={(overrides.custom_args ?? []).join(" ")}
-              onChange={(v) => handleOverride("custom_args", v ? v.split(/\s+/) : null)}
-              placeholder="--flag1 --flag2 value"
-            />
-          </div>
-        </CollapsibleSection>
+        {/* Tab content — scrollable */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+
+          {/* Hooks tab */}
+          {activeTab === "hooks" && isClaude && (
+            <div>
+              <p className="text-[10px] text-slate-600 mb-3">Auto-run scripts when Claude writes, edits, or stops</p>
+              <HooksSection
+                hooks={hooksConfig}
+                onUpdate={(hooks) => {
+                  updateHooks(hooks); setDirty(true);
+                  trackEvent("tuning.hooks_changed", "tuning", { count: hooks.length, session_type: sessionType }, sessionId);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Permissions tab */}
+          {activeTab === "permissions" && isClaude && (
+            <div>
+              <p className="text-[10px] text-slate-600 mb-3">Auto-approve or block specific commands and actions</p>
+              <PermissionsSection
+                rules={permissionRules}
+                onUpdate={(rules) => {
+                  updatePermissions(rules); setDirty(true);
+                  trackEvent("tuning.permissions_changed", "tuning", { allow_count: rules.allow.length, deny_count: rules.deny.length, session_type: sessionType }, sessionId);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Files tab */}
+          {activeTab === "files" && hasFileKinds && (
+            <div>
+              <p className="text-[10px] text-slate-600 mb-3">Install commands, agents, skills, and context files to the project</p>
+              <FileConfigsSection
+                sessionId={sessionId}
+                sessionType={sessionType}
+                files={fileConfigs}
+                onUpdate={(files) => {
+                  updateFileConfigs(files); setDirty(true);
+                  trackEvent("tuning.files_changed", "tuning", { count: files.length, session_type: sessionType }, sessionId);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Prompt & Commands tab */}
+          {activeTab === "prompt" && (
+            <div className="space-y-5">
+              {isClaude && (
+                <div>
+                  <h4 className="text-xs font-medium text-slate-400 mb-2">System Prompt</h4>
+                  <p className="text-[10px] text-slate-600 mb-2">Extra instructions appended to Claude's system prompt</p>
+                  <textarea
+                    value={overrides.append_system_prompt ?? ""}
+                    onChange={(e) => handleOverride("append_system_prompt", e.target.value || null)}
+                    placeholder="e.g., Always explain your reasoning. Use TypeScript strict mode. Follow the existing patterns in this codebase."
+                    rows={4}
+                    className="w-full bg-[#141422] border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-600 resize-y focus:outline-none focus:border-violet-500/50"
+                  />
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-xs font-medium text-slate-400 mb-2">Startup Commands</h4>
+                <p className="text-[10px] text-slate-600 mb-2">Slash commands typed into the session after the agent is ready</p>
+                <div className="space-y-2">
+                  {startupCommands.map((cmd, i) => (
+                    <div key={i} className="flex items-center gap-2 group">
+                      <span className="flex-1 text-xs font-mono text-slate-400 bg-[#141422] rounded px-2.5 py-1.5 border border-slate-700/30">
+                        {cmd}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveCommand(i)}
+                        className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all text-xs"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newCommand}
+                      onChange={(e) => setNewCommand(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddCommand()}
+                      placeholder="/loop 5m /run-tests"
+                      className="flex-1 bg-[#141422] border border-slate-700/50 rounded px-2.5 py-1.5 text-xs text-slate-300 placeholder-slate-600 font-mono focus:outline-none focus:border-violet-500/50"
+                    />
+                    <button
+                      onClick={handleAddCommand}
+                      disabled={!newCommand.trim()}
+                      className="px-2.5 py-1.5 rounded text-xs bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Advanced tab */}
+          {activeTab === "advanced" && (
+            <div className="space-y-3">
+              <p className="text-[10px] text-slate-600 mb-1">Max turns, MCP config, custom CLI arguments</p>
+              {isClaude && (
+                <>
+                  <TextInput
+                    label="Max Turns"
+                    type="number"
+                    value={overrides.max_turns?.toString() ?? ""}
+                    onChange={(v) => handleOverride("max_turns", v ? parseInt(v) : null)}
+                    placeholder="No limit"
+                  />
+                  <TextInput
+                    label="MCP Config Path"
+                    value={overrides.mcp_config_path ?? ""}
+                    onChange={(v) => handleOverride("mcp_config_path", v || null)}
+                    placeholder="/path/to/mcp.json"
+                  />
+                  <TextInput
+                    label="Main Thread Agent"
+                    value={overrides.agent ?? ""}
+                    onChange={(v) => handleOverride("agent", v || null)}
+                    placeholder="agent-name (from .claude/agents/)"
+                  />
+                </>
+              )}
+              <TextInput
+                label="Custom CLI Args"
+                value={(overrides.custom_args ?? []).join(" ")}
+                onChange={(v) => handleOverride("custom_args", v ? v.split(/\s+/) : null)}
+                placeholder="--flag1 --flag2 value"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
@@ -499,21 +485,53 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
   );
 }
 
+// ── Tab configuration ──
+
+interface TabDef {
+  id: string;
+  label: string;
+  count: number;
+}
+
+function getTabsForClaude(hooks: number, permissions: number, files: number, commands: number): TabDef[] {
+  return [
+    { id: "hooks", label: "Hooks", count: hooks },
+    { id: "permissions", label: "Permissions", count: permissions },
+    { id: "files", label: "Files", count: files },
+    { id: "prompt", label: "Prompt & Commands", count: commands },
+    { id: "advanced", label: "Advanced", count: 0 },
+  ];
+}
+
+function getTabsForCursor(files: number, commands: number): TabDef[] {
+  return [
+    { id: "files", label: "Files", count: files },
+    { id: "prompt", label: "Commands", count: commands },
+    { id: "advanced", label: "Advanced", count: 0 },
+  ];
+}
+
+function getTabsForGemini(files: number, commands: number): TabDef[] {
+  return [
+    { id: "files", label: "Files", count: files },
+    { id: "prompt", label: "Commands", count: commands },
+    { id: "advanced", label: "Advanced", count: 0 },
+  ];
+}
+
+function getTabsGeneric(commands: number): TabDef[] {
+  return [
+    { id: "prompt", label: "Commands", count: commands },
+    { id: "advanced", label: "Advanced", count: 0 },
+  ];
+}
+
 // ── Sub-components ──
 
 interface OptionItem {
   value: string;
   label: string;
   hint: string;
-}
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="mb-3">
-      <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider">{title}</h3>
-      {subtitle && <p className="text-[10px] text-slate-600 mt-0.5">{subtitle}</p>}
-    </div>
-  );
 }
 
 function ToggleRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -609,43 +627,6 @@ function BoolToggle({
       </span>
       {label}
     </button>
-  );
-}
-
-function CollapsibleSection({
-  title,
-  subtitle,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-start gap-2 mb-2 hover:opacity-80 transition-opacity text-left"
-      >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          fill="none"
-          className={`transition-transform mt-0.5 shrink-0 ${open ? "rotate-90" : ""}`}
-        >
-          <path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <div>
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{title}</span>
-          {subtitle && <p className="text-[10px] text-slate-600 mt-0.5 normal-case tracking-normal">{subtitle}</p>}
-        </div>
-      </button>
-      {open && <div className="pl-4">{children}</div>}
-    </section>
   );
 }
 
