@@ -610,9 +610,12 @@ impl PtyPool {
             cmd.arg(part);
         }
 
-        // Claude-specific: use --continue on restart
+        // Claude-specific: use --continue on restart UNLESS tuning changed
+        // (--continue resumes the old session, ignoring new CLI args)
         if session_type.id == "claude-code" {
-            cmd.arg("--continue");
+            if tuning.is_none() {
+                cmd.arg("--continue");
+            }
             if effective_config.permission_mode.is_none() && skip_permissions {
                 cmd.arg("--dangerously-skip-permissions");
             }
