@@ -137,17 +137,17 @@ export function TerminalOverlay({
         return;
       }
 
-      // ⌘. → toggle timeline
+      // ⌘. → toggle timeline (closes tuning)
       if (e.metaKey && e.key === ".") {
         e.preventDefault();
-        setTimelineOpen((v) => !v);
+        setTimelineOpen((v) => { if (!v) setTuningOpen(false); return !v; });
         return;
       }
 
-      // ⌘, → toggle tuning panel
+      // ⌘, → toggle tuning panel (closes timeline)
       if (e.metaKey && e.key === ",") {
         e.preventDefault();
-        setTuningOpen((v) => !v);
+        setTuningOpen((v) => { if (!v) setTimelineOpen(false); return !v; });
         return;
       }
 
@@ -282,7 +282,7 @@ export function TerminalOverlay({
             {/* Tune button */}
             {activeSession.session_type !== "terminal" && (
               <button
-                onClick={() => setTuningOpen((v) => !v)}
+                onClick={() => setTuningOpen((v) => { if (!v) setTimelineOpen(false); return !v; })}
                 className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                   tuningOpen
                     ? "text-violet-300 bg-violet-500/20"
@@ -297,7 +297,7 @@ export function TerminalOverlay({
             {/* Catch me up button */}
             {showTimelineButton && (
               <button
-                onClick={() => setTimelineOpen((v) => !v)}
+                onClick={() => setTimelineOpen((v) => { if (!v) setTuningOpen(false); return !v; })}
                 className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                   timelineOpen
                     ? "text-slate-200 bg-slate-700/50"
