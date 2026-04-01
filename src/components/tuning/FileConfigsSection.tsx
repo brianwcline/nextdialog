@@ -118,6 +118,8 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [installStatus, setInstallStatus] = useState<FileInstallStatus[]>([]);
   const [discovered, setDiscovered] = useState<DiscoveredConfig[]>([]);
+  const [expandedDiscovered, setExpandedDiscovered] = useState<string | null>(null);
+  const [discoveredContent, setDiscoveredContent] = useState<Record<string, string>>({});
 
   const kinds = getFileKindsForAgent(sessionType);
 
@@ -227,18 +229,53 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
         <div>
           <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">In Project</h4>
           <div className="space-y-1.5">
-            {discoveredOnly.map((d) => (
-              <div key={d.relative_path} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/20 border border-slate-700/20">
-                <KindBadge kind={d.kind as FileConfigKind} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-[11px] text-slate-300">{d.name}</span>
-                  <span className="text-[10px] text-slate-600 ml-2 font-mono">{d.relative_path}</span>
+            {discoveredOnly.map((d) => {
+              const isExpanded = expandedDiscovered === d.relative_path;
+              return (
+                <div key={d.relative_path} className="rounded-lg bg-slate-800/20 border border-slate-700/20 overflow-hidden">
+                  <button
+                    onClick={async () => {
+                      if (isExpanded) {
+                        setExpandedDiscovered(null);
+                      } else {
+                        setExpandedDiscovered(d.relative_path);
+                        if (!discoveredContent[d.relative_path]) {
+                          try {
+                            const content = await invoke<string>("read_project_file", { id: sessionId, relativePath: d.relative_path });
+                            setDiscoveredContent((prev) => ({ ...prev, [d.relative_path]: content }));
+                          } catch (e) {
+                            setDiscoveredContent((prev) => ({ ...prev, [d.relative_path]: `Error reading file: ${e}` }));
+                          }
+                        }
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-700/20 transition-colors"
+                  >
+                    <svg
+                      width="8" height="8" viewBox="0 0 10 10" fill="none"
+                      className={`shrink-0 transition-transform text-slate-600 ${isExpanded ? "rotate-90" : ""}`}
+                    >
+                      <path d="M3 1L7 5L3 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <KindBadge kind={d.kind as FileConfigKind} />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[11px] text-slate-300">{d.name}</span>
+                      <span className="text-[10px] text-slate-600 ml-2 font-mono">{d.relative_path}</span>
+                    </div>
+                    {d.managed && (
+                      <span className="text-[9px] text-violet-400">NextDialog</span>
+                    )}
+                  </button>
+                  {isExpanded && (
+                    <div className="px-3 pb-3">
+                      <pre className="w-full bg-[#141422] border border-slate-700/50 rounded-lg px-3 py-2 text-[11px] text-slate-400 font-mono overflow-x-auto max-h-[300px] overflow-y-auto whitespace-pre-wrap">
+                        {discoveredContent[d.relative_path] ?? "Loading..."}
+                      </pre>
+                    </div>
+                  )}
                 </div>
-                {d.managed && (
-                  <span className="text-[9px] text-violet-400">NextDialog</span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -573,6 +573,20 @@ pub fn scan_project_configs(
     }
 }
 
+#[tauri::command]
+pub fn read_project_file(
+    manager: State<'_, SessionManager>,
+    id: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let session = manager
+        .get(&id)
+        .ok_or_else(|| format!("Session not found: {id}"))?;
+    let path = std::path::Path::new(&session.working_directory).join(&relative_path);
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {}: {e}", path.display()))
+}
+
 // ── Tuning Profiles ──
 
 #[tauri::command]
