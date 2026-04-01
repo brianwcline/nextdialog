@@ -70,6 +70,7 @@ impl TuningProfileManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get(&self, id: &str) -> Option<TuningProfile> {
         self.profiles.lock().unwrap().iter().find(|p| p.id == id).cloned()
     }
