@@ -112,6 +112,7 @@ pub fn run() {
             commands::uninstall_tuning_file,
             commands::uninstall_all_tuning_files,
             commands::get_tuning_install_status,
+            commands::scan_project_configs,
             commands::list_tuning_profiles,
             commands::create_tuning_profile,
             commands::update_tuning_profile,

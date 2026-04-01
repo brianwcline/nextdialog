@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { trackEvent } from "../../lib/telemetry";
-import type { FileConfig, FileConfigKind } from "../../lib/types";
+import type { FileConfig, FileConfigKind, DiscoveredConfig } from "../../lib/types";
 
 // ── Agent-aware file kinds ──
 
@@ -117,8 +117,16 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
   const [newContent, setNewContent] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [installStatus, setInstallStatus] = useState<FileInstallStatus[]>([]);
+  const [discovered, setDiscovered] = useState<DiscoveredConfig[]>([]);
 
   const kinds = getFileKindsForAgent(sessionType);
+
+  // Scan project for existing configs
+  useEffect(() => {
+    invoke<DiscoveredConfig[]>("scan_project_configs", { id: sessionId })
+      .then(setDiscovered)
+      .catch(console.error);
+  }, [sessionId]);
 
   // Load install status
   useEffect(() => {
@@ -208,9 +216,37 @@ export function FileConfigsSection({ sessionId, sessionType, files, onUpdate }: 
 
   if (kinds.length === 0) return null;
 
+  // Filter discovered to exclude files already in tuning config
+  const tuningPaths = new Set(files.map((f) => f.relative_path));
+  const discoveredOnly = discovered.filter((d) => !tuningPaths.has(d.relative_path));
+
   return (
     <div className="space-y-3">
-      {/* Existing files */}
+      {/* Discovered project configs */}
+      {discoveredOnly.length > 0 && (
+        <div>
+          <h4 className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">In Project</h4>
+          <div className="space-y-1.5">
+            {discoveredOnly.map((d) => (
+              <div key={d.relative_path} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/20 border border-slate-700/20">
+                <KindBadge kind={d.kind as FileConfigKind} />
+                <div className="flex-1 min-w-0">
+                  <span className="text-[11px] text-slate-300">{d.name}</span>
+                  <span className="text-[10px] text-slate-600 ml-2 font-mono">{d.relative_path}</span>
+                </div>
+                {d.managed && (
+                  <span className="text-[9px] text-violet-400">NextDialog</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tuning-managed files */}
+      {files.length > 0 && discoveredOnly.length > 0 && (
+        <h4 className="text-[10px] text-slate-500 uppercase tracking-wider">Tuned</h4>
+      )}
       {files.map((file, i) => {
         const status = getStatus(file.relative_path);
         const isEditing = editingIndex === i;

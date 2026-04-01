@@ -160,6 +160,14 @@ export interface TuningProfile {
   updated_at: string;
 }
 
+export interface DiscoveredConfig {
+  kind: string;
+  relative_path: string;
+  name: string;
+  preview: string;
+  managed: boolean;
+}
+
 export const defaultSessionTuning: SessionTuning = {
   config_overrides: {},
   file_configs: [],

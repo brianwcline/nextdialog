@@ -13,6 +13,7 @@ use crate::session::config::{CreateSessionRequest, SessionConfig};
 use crate::session::file_tracker::{FileConflict, FileTracker};
 use crate::session::manager::SessionManager;
 use crate::session::tuning::SessionTuning;
+use crate::session::tuning_discovery;
 use crate::session::tuning_files;
 use crate::session::tuning_profiles::{TuningProfile, TuningProfileManager};
 use crate::session::types::{SessionType, SessionTypeManager};
@@ -557,6 +558,19 @@ pub fn get_tuning_install_status(
         None => return vec![],
     };
     tuning_files::get_install_status(&session.working_directory, &tuning.file_configs)
+}
+
+// ── Tuning Discovery ──
+
+#[tauri::command]
+pub fn scan_project_configs(
+    manager: State<'_, SessionManager>,
+    id: String,
+) -> Vec<tuning_discovery::DiscoveredConfig> {
+    match manager.get(&id) {
+        Some(session) => tuning_discovery::scan_project_configs(&session.working_directory),
+        None => vec![],
+    }
 }
 
 // ── Tuning Profiles ──
