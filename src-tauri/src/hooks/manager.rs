@@ -87,6 +87,7 @@ impl HookManager {
     }
 
     /// Clean stale hook configs from working directories (e.g., after crash).
+    /// Removes managed hooks (tagged and untagged orphans) and tuning artifacts.
     /// Runs against the filesystem only — no active servers to stop.
     pub fn cleanup_stale_hooks(working_dirs: &[String]) {
         for dir in working_dirs {
@@ -94,6 +95,8 @@ impl HookManager {
                 Ok(()) => eprintln!("[hooks] Cleaned stale hooks from {dir}"),
                 Err(e) => eprintln!("[hooks] Failed to clean stale hooks from {dir}: {e}"),
             }
+            // Also clean stale tuning hooks and permissions
+            let _ = config::remove_tuning_hooks(dir);
         }
     }
 

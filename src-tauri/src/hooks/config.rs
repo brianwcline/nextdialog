@@ -330,6 +330,7 @@ fn is_tuning_managed(matcher: &serde_json::Value) -> bool {
 }
 
 /// Check if a matcher has a managed hook targeting a specific port.
+/// Matches by explicit `_nextdialog_managed` tag OR by URL pattern (catches untagged orphans).
 fn is_managed_by_port(matcher: &serde_json::Value, port: u16) -> bool {
     let prefix = format!("http://127.0.0.1:{port}/hook/");
     matcher
@@ -337,31 +338,42 @@ fn is_managed_by_port(matcher: &serde_json::Value, port: u16) -> bool {
         .and_then(|h| h.as_array())
         .map(|hooks| {
             hooks.iter().any(|h| {
-                h.get("_nextdialog_managed")
-                    .and_then(|v| v.as_bool())
+                h.get("url")
+                    .and_then(|u| u.as_str())
+                    .map(|u| u.starts_with(&prefix))
                     .unwrap_or(false)
-                    && h.get("url")
-                        .and_then(|u| u.as_str())
-                        .map(|u| u.starts_with(&prefix))
-                        .unwrap_or(false)
             })
         })
         .unwrap_or(false)
 }
 
 /// Check if a matcher has any managed hook (any port). Used for crash recovery.
+/// Matches by explicit `_nextdialog_managed` tag OR by URL pattern (catches untagged orphans).
 fn is_managed(matcher: &serde_json::Value) -> bool {
     matcher
         .get("hooks")
         .and_then(|h| h.as_array())
         .map(|hooks| {
             hooks.iter().any(|h| {
-                h.get("_nextdialog_managed")
+                let has_tag = h
+                    .get("_nextdialog_managed")
                     .and_then(|v| v.as_bool())
-                    .unwrap_or(false)
+                    .unwrap_or(false);
+                let has_url = h
+                    .get("url")
+                    .and_then(|u| u.as_str())
+                    .map(is_nextdialog_hook_url)
+                    .unwrap_or(false);
+                has_tag || has_url
             })
         })
         .unwrap_or(false)
+}
+
+/// Check if a URL matches the NextDialog hook server pattern.
+/// Covers port range 7432-7499 used by PortPool.
+fn is_nextdialog_hook_url(url: &str) -> bool {
+    url.starts_with("http://127.0.0.1:74") && url.contains("/hook/")
 }
 
 fn claude_settings_path(working_dir: &str) -> PathBuf {
@@ -547,6 +559,68 @@ mod tests {
         remove_hook_config(dir, Some(7434)).unwrap();
         remove_hook_config(dir, Some(7432)).unwrap();
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn remove_all_cleans_untagged_orphans() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        // Simulate an orphaned entry without _nextdialog_managed flag
+        let orphan = serde_json::json!({
+            "hooks": {
+                "PostToolUse": [{
+                    "matcher": "",
+                    "hooks": [{
+                        "type": "http",
+                        "url": "http://127.0.0.1:7437/hook/PostToolUse",
+                        "timeout": 2
+                    }]
+                }],
+                "Stop": [{
+                    "matcher": "",
+                    "hooks": [{
+                        "type": "http",
+                        "url": "http://127.0.0.1:7437/hook/Stop",
+                        "timeout": 2
+                    }]
+                }]
+            }
+        });
+        let path = claude_settings_path(dir);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, serde_json::to_string_pretty(&orphan).unwrap()).unwrap();
+
+        // Crash recovery should remove untagged orphans by URL pattern
+        remove_hook_config(dir, None).unwrap();
+        assert!(!path.exists(), "Untagged orphan entries should be cleaned up");
+    }
+
+    #[test]
+    fn remove_by_port_cleans_untagged_orphans() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        // Simulate an orphaned entry without _nextdialog_managed flag
+        let orphan = serde_json::json!({
+            "hooks": {
+                "PostToolUse": [{
+                    "matcher": "",
+                    "hooks": [{
+                        "type": "http",
+                        "url": "http://127.0.0.1:7437/hook/PostToolUse",
+                        "timeout": 2
+                    }]
+                }]
+            }
+        });
+        let path = claude_settings_path(dir);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, serde_json::to_string_pretty(&orphan).unwrap()).unwrap();
+
+        // Port-specific removal should also catch untagged entries
+        remove_hook_config(dir, Some(7437)).unwrap();
+        assert!(!path.exists(), "Untagged orphan should be removed by port");
     }
 
     #[test]

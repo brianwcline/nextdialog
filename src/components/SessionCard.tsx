@@ -105,25 +105,27 @@ export function SessionCard({
       className="relative w-full max-w-[400px] h-[200px] rounded-2xl glass-card cursor-pointer text-left px-5 py-4 flex flex-col overflow-hidden group"
     >
       {/* ── Top: Status row ── */}
-      <div className="flex items-center gap-2">
-        <StatusDot status={session.status} size={9} />
-        <span className="text-[11px] font-medium text-slate-400 group-hover:text-slate-500 transition-colors">
-          {annotation && annotation !== "__analyzing__"
-            ? annotation
-            : statusLabels[session.status] ?? session.status}
-        </span>
-        {session.tuning && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-100 text-violet-500 font-medium">
-            Tuned
+      <div className="flex w-full items-center justify-between">
+        <div className="flex items-center gap-2">
+          <StatusDot status={session.status} size={9} />
+          <span className="text-[11px] font-medium text-slate-400 group-hover:text-slate-500 transition-colors">
+            {annotation && annotation !== "__analyzing__"
+              ? annotation
+              : statusLabels[session.status] ?? session.status}
           </span>
-        )}
+          {session.tuning && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] bg-violet-100 text-violet-500 font-medium">
+              Tuned
+            </span>
+          )}
+        </div>
         {sessionType && (
-          <span className="ml-auto opacity-30 group-hover:opacity-50 transition-opacity">
+          <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100/60 group-hover:bg-slate-100/80 transition-all">
             <SessionTypeIcon
               id={sessionType.id}
               icon={sessionType.icon}
               color={brandColor}
-              className="!w-4 !h-4"
+              className="!w-[18px] !h-[18px]"
             />
           </span>
         )}

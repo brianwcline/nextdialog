@@ -6,6 +6,7 @@ export interface RecentSession {
   working_directory: string;
   skip_permissions: boolean;
   initial_prompt?: string;
+  session_type?: string;
   last_active: string;
 }
 

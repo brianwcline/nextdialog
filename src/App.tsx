@@ -213,6 +213,7 @@ function AppContent() {
             working_directory: session.working_directory,
             skip_permissions: session.skip_permissions,
             initial_prompt: session.initial_prompt,
+            session_type: session.session_type,
             last_active: session.last_active,
           });
           setRecentSessions(getRecentSessions());
@@ -272,14 +273,18 @@ function AppContent() {
   );
 
   const handleAddCompanion = useCallback(async (parentId: string) => {
+    let companionId: string | undefined;
     try {
       const companion = await invoke<Session>("create_companion", { parentId });
+      companionId = companion.id;
       trackEvent("companion.added", "companion-terminals", undefined, parentId);
+      spawningRef.current.add(companion.id); // prevent useEffect double-spawn
       await loadSessions();
       await invoke("spawn_pty_session", { id: companion.id, rows: null, cols: null });
       setSpawnedIds((prev) => [...prev, companion.id]);
     } catch (err) {
       console.error("Failed to create companion:", err);
+      if (companionId) spawningRef.current.delete(companionId);
     }
   }, [loadSessions]);
 
@@ -426,6 +431,7 @@ function AppContent() {
             name: recent.name,
             working_directory: recent.working_directory,
             skip_permissions: recent.skip_permissions,
+            session_type: recent.session_type,
           });
         }}
         sessionTypes={sessionTypes}
