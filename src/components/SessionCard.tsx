@@ -25,6 +25,14 @@ const statusLabels: Record<string, string> = {
   error: "Error",
 };
 
+function relativeTime(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
 export function SessionCard({
   session,
   index,
@@ -35,8 +43,15 @@ export function SessionCard({
   const [contextUsage, setContextUsage] = useState<number | null>(null);
   const [annotation, setAnnotation] = useState<string | null>(null);
   const [lastTimelineEvent, setLastTimelineEvent] = useState<string | null>(null);
+  const [, setTick] = useState(0);
 
   const brandColor = sessionType?.color;
+
+  // Refresh relative time every 30s
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Listen for context usage events
   useEffect(() => {
@@ -83,16 +98,16 @@ export function SessionCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-      whileHover={{ y: -4, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ y: -3, scale: 1.015 }}
+      whileTap={{ scale: 0.985 }}
       onClick={onClick}
       onContextMenu={onContextMenu}
-      className="relative w-[280px] h-[280px] rounded-[2rem] glass-card cursor-pointer text-left px-7 py-7 flex flex-col overflow-hidden group min-w-0"
+      className="relative w-full max-w-[400px] h-[200px] rounded-2xl glass-card cursor-pointer text-left px-5 py-4 flex flex-col overflow-hidden group"
     >
-      {/* Status dot — top left */}
-      <div className="flex items-center gap-2 mb-4">
-        <StatusDot status={session.status} size={10} />
-        <span className="text-xs font-medium text-slate-400 group-hover:text-slate-500 transition-colors">
+      {/* ── Top: Status row ── */}
+      <div className="flex items-center gap-2">
+        <StatusDot status={session.status} size={9} />
+        <span className="text-[11px] font-medium text-slate-400 group-hover:text-slate-500 transition-colors">
           {annotation && annotation !== "__analyzing__"
             ? annotation
             : statusLabels[session.status] ?? session.status}
@@ -102,46 +117,47 @@ export function SessionCard({
             Tuned
           </span>
         )}
+        {sessionType && (
+          <span className="ml-auto opacity-30 group-hover:opacity-50 transition-opacity">
+            <SessionTypeIcon
+              id={sessionType.id}
+              icon={sessionType.icon}
+              color={brandColor}
+              className="!w-4 !h-4"
+            />
+          </span>
+        )}
       </div>
 
-      {/* Brand icon — top right */}
-      {sessionType && (
-        <span className="absolute top-6 right-7 opacity-30 group-hover:opacity-50 transition-opacity">
-          <SessionTypeIcon
-            id={sessionType.id}
-            icon={sessionType.icon}
-            color={brandColor}
-            className="!w-5 !h-5"
-          />
-        </span>
-      )}
-
-      {/* Title */}
-      <h3 className="text-2xl font-medium tracking-tight text-slate-800 group-hover:text-slate-900 transition-colors line-clamp-2 leading-tight mb-2">
-        {session.name}
-      </h3>
-
-      {/* Path */}
-      <p className="text-sm text-slate-400 font-mono truncate group-hover:text-slate-500 transition-colors">
-        {session.working_directory.replace(/^\/Users\/[^/]+/, "~")}
-      </p>
-
-      {/* Hook notification */}
-      {session.hookNotification && (
-        <p className="text-xs text-amber-600/70 mt-1.5 line-clamp-2 leading-snug">
-          {session.hookNotification}
+      {/* ── Middle: Identity (grows to fill) ── */}
+      <div className="flex-1 flex flex-col justify-center min-h-0">
+        <h3 className="text-lg font-medium tracking-tight text-slate-800 group-hover:text-slate-900 transition-colors line-clamp-1 leading-snug">
+          {session.name}
+        </h3>
+        <p className="text-xs text-slate-400 font-mono truncate mt-0.5 group-hover:text-slate-500 transition-colors">
+          {session.working_directory.replace(/^\/Users\/[^/]+/, "~")}
         </p>
-      )}
+        {session.hookNotification && (
+          <p className="text-[11px] text-amber-600/70 mt-1 line-clamp-1 leading-snug">
+            {session.hookNotification}
+          </p>
+        )}
+      </div>
 
-      {/* Last timeline event */}
-      {lastTimelineEvent && (
-        <p className="text-[11px] text-slate-400/70 font-mono truncate mt-1">
-          {lastTimelineEvent}
-        </p>
-      )}
-
-      {/* Token burn bar — pushed to bottom */}
-      <div className="mt-auto pt-4">
+      {/* ── Bottom: Activity footer (pinned) ── */}
+      <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-200/30">
+        <div className="flex items-baseline gap-2 min-h-[16px]">
+          {lastTimelineEvent ? (
+            <p className="text-[11px] text-slate-400/70 font-mono truncate flex-1 min-w-0">
+              {lastTimelineEvent}
+            </p>
+          ) : (
+            <span className="flex-1" />
+          )}
+          <span className="text-[10px] text-slate-400/50 whitespace-nowrap flex-shrink-0">
+            {relativeTime(session.last_active)}
+          </span>
+        </div>
         {contextUsage !== null && <TokenBurnBar usage={contextUsage} />}
       </div>
     </motion.button>

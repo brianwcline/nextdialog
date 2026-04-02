@@ -99,12 +99,12 @@ export function HomeView({
       {sessions.length === 0 ? (
         <EmptyState onNewSession={onNewSession} />
       ) : (
-        <div className="flex-1 overflow-y-auto flex items-center justify-center p-8">
+        <div className="flex-1 overflow-y-auto flex items-center justify-center p-8 pb-20">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: isTerminalOpen ? 0 : 1, y: isTerminalOpen ? -20 : 0 }}
             transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-5xl w-full justify-items-center"
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl w-full justify-items-center"
           >
             {renderCards(sessions, 0)}
           </motion.div>
