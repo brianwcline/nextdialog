@@ -92,12 +92,15 @@ export function NewSessionModal({
   const filteredSessions = useMemo(() => {
     if (!filter.trim()) return recentSessions;
     const q = filter.toLowerCase();
-    return recentSessions.filter(
-      (s) =>
+    return recentSessions.filter((s) => {
+      const typeName = sessionTypes.find((t) => t.id === s.session_type)?.name ?? s.session_type;
+      return (
         s.name.toLowerCase().includes(q) ||
-        s.working_directory.toLowerCase().includes(q),
-    );
-  }, [recentSessions, filter]);
+        s.working_directory.toLowerCase().includes(q) ||
+        typeName.toLowerCase().includes(q)
+      );
+    });
+  }, [recentSessions, filter, sessionTypes]);
 
   const handlePickDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -265,26 +268,36 @@ export function NewSessionModal({
             No matching sessions
           </p>
         ) : (
-          filteredSessions.map((session, idx) => (
-            <button
-              key={`${session.name}-${session.working_directory}-${idx}`}
-              type="button"
-              onClick={() => onReopenRecent?.(session)}
-              className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-100/80 transition-colors group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-700 truncate">
-                  {session.name}
-                </span>
-                <span className="text-xs text-slate-400 ml-2 shrink-0">
-                  {formatRelativeTime(session.last_active)}
-                </span>
-              </div>
-              <div className="text-xs text-slate-400 font-mono truncate mt-0.5">
-                {abbreviateDirectory(session.working_directory)}
-              </div>
-            </button>
-          ))
+          filteredSessions.map((session, idx) => {
+            const st = sessionTypes.find((t) => t.id === session.session_type);
+            return (
+              <button
+                key={`${session.name}-${session.working_directory}-${idx}`}
+                type="button"
+                onClick={() => onReopenRecent?.(session)}
+                className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-100/80 transition-colors group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <SessionTypeIcon
+                      id={session.session_type}
+                      icon={st?.icon ?? "terminal"}
+                      className="text-base shrink-0"
+                    />
+                    <span className="text-sm font-medium text-slate-700 truncate">
+                      {session.name}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-400 ml-2 shrink-0">
+                    {formatRelativeTime(session.last_active)}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-400 font-mono truncate mt-0.5 pl-6">
+                  {abbreviateDirectory(session.working_directory)}
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </div>

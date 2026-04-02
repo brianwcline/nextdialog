@@ -214,6 +214,7 @@ function AppContent() {
             skip_permissions: session.skip_permissions,
             initial_prompt: session.initial_prompt,
             session_type: session.session_type,
+            tuning: session.tuning,
             last_active: session.last_active,
           });
           setRecentSessions(getRecentSessions());
@@ -425,14 +426,19 @@ function AppContent() {
         onClose={() => setShowNewSession(false)}
         onCreate={handleCreateSession}
         recentSessions={recentSessions}
-        onReopenRecent={(recent) => {
+        onReopenRecent={async (recent) => {
           setShowNewSession(false);
-          handleCreateSession({
+          const session = await createSession({
             name: recent.name,
             working_directory: recent.working_directory,
             skip_permissions: recent.skip_permissions,
             session_type: recent.session_type,
           });
+          if (recent.tuning) {
+            await invoke("update_session_tuning", { id: session.id, tuning: recent.tuning });
+          }
+          trackEvent("session.created", "session-management", { session_type: recent.session_type, source: "recent" }, session.id);
+          await handleSelectSession(session.id);
         }}
         sessionTypes={sessionTypes}
       />
