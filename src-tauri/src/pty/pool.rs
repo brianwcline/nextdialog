@@ -662,6 +662,7 @@ impl PtyPool {
             for arg in tuning::extra_args_from_overrides(&t.config_overrides) {
                 cmd.arg(arg);
             }
+            tuning::apply_env_overrides(&mut cmd, &t.config_overrides);
         }
 
         cmd.cwd(cwd);

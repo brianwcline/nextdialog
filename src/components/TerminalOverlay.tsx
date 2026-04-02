@@ -469,7 +469,7 @@ export function TerminalOverlay({
                   onDismiss={() => setTuningOpen(false)}
                   onRestart={() => {
                     setTuningOpen(false);
-                    onRestart(session.id);
+                    onRestart(activeSession.id);
                   }}
                 />
               </motion.div>
