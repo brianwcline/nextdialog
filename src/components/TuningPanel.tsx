@@ -57,6 +57,7 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("hooks");
 
   const overrides = tuning?.config_overrides ?? {};
@@ -148,36 +149,53 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 : "Load Profile"}
             </button>
             {showProfileMenu && (
-              <div className="absolute top-full left-0 mt-1 z-30 min-w-[200px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1">
-                {profiles.length === 0 ? (
-                  <div className="px-3 py-2 text-[11px] text-slate-500">No saved profiles</div>
-                ) : (
-                  profiles.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-slate-600/30 group">
-                      <button
-                        onClick={() => handleLoadProfile(p.tuning)}
-                        className="text-[11px] text-slate-300 text-left flex-1 min-w-0 truncate"
-                      >
-                        {p.name}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteProfile(p.id); }}
-                        className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all ml-2"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
-                          <path d="M11 3L3 11M3 3L11 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))
-                )}
-                <div
-                  className="border-t border-slate-600/50 mt-1 pt-1"
-                  onClick={() => setShowProfileMenu(false)}
-                >
-                  {/* Dismiss on backdrop click handled by parent */}
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => { setShowProfileMenu(false); setConfirmDeleteId(null); }} />
+                <div className="absolute top-full left-0 mt-1 z-30 min-w-[200px] rounded-lg bg-[#313244] border border-slate-600/50 shadow-xl py-1">
+                  {profiles.length === 0 ? (
+                    <div className="px-3 py-2 text-[11px] text-slate-500">No saved profiles</div>
+                  ) : (
+                    profiles.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-slate-600/30 group">
+                        {confirmDeleteId === p.id ? (
+                          <>
+                            <span className="text-[11px] text-red-400 flex-1 min-w-0 truncate">Delete "{p.name}"?</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteProfile(p.id); setConfirmDeleteId(null); }}
+                              className="text-[10px] text-red-400 hover:text-red-300 ml-2"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                              className="text-[10px] text-slate-500 hover:text-slate-300 ml-1.5"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleLoadProfile(p.tuning)}
+                              className="text-[11px] text-slate-300 text-left flex-1 min-w-0 truncate"
+                            >
+                              {p.name}
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(p.id); }}
+                              className="text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all ml-2"
+                            >
+                              <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
+                                <path d="M11 3L3 11M3 3L11 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
