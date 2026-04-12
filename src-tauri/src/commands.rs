@@ -681,6 +681,11 @@ pub fn get_timeline_entries(
 }
 
 #[tauri::command]
+pub fn get_timeline_count(ledger: State<'_, TimelineLedger>, id: String) -> usize {
+    ledger.count(&id)
+}
+
+#[tauri::command]
 pub fn catch_me_up(
     ledger: State<'_, TimelineLedger>,
     intelligence: State<'_, IntelligenceManager>,

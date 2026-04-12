@@ -42,3 +42,8 @@ website/
 remotion-video/
 nextdialog-api/
 demo/
+product-manager/
+
+# PM agent state leaked to repo root
+state.json
+PROJECT_BRIEF.md

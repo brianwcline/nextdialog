@@ -105,6 +105,7 @@ pub fn run() {
             commands::reset_background,
             commands::get_background_image_data,
             commands::get_timeline_entries,
+            commands::get_timeline_count,
             commands::catch_me_up,
             commands::update_session_tuning,
             commands::get_session_tuning,

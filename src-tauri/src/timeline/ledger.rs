@@ -128,8 +128,7 @@ impl TimelineLedger {
         let _ = fs::remove_file(&path);
     }
 
-    /// Count entries in a session's timeline (for lazy trim checks).
-    #[allow(dead_code)]
+    /// Count entries in a session's timeline.
     pub fn count(&self, session_id: &str) -> usize {
         let path = self.session_path(session_id);
         match fs::File::open(&path) {

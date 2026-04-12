@@ -24,6 +24,12 @@ pub struct SessionConfig {
     /// Per-session tuning overrides (model, effort, hooks, commands, etc.)
     #[serde(default)]
     pub tuning: Option<SessionTuning>,
+    /// Latest user prompt captured from a Claude Code `UserPromptSubmit`
+    /// hook. Rendered as a subtitle on the focused hero card in the smart
+    /// layout. Updates on every prompt so it reflects the session's current
+    /// context, not a frozen title.
+    #[serde(default)]
+    pub current_prompt: Option<String>,
 }
 
 fn default_session_type() -> String {

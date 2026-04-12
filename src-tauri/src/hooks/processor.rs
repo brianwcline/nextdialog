@@ -3,6 +3,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::payloads::{HookEvent, HookPayload};
 use crate::session::file_tracker::FileTracker;
+use crate::session::manager::SessionManager;
 use crate::status::detector::HookStatus;
 use crate::timeline::ledger::{TimelineEntry, TimelineLedger};
 
@@ -82,6 +83,32 @@ pub fn process(session_id: &str, payload: HookPayload, app_handle: &AppHandle) {
                 "ended",
             );
             Some(TimelineEntry::new("lifecycle", "Session ended"))
+        }
+        HookEvent::UserPromptSubmit => {
+            let prompt = payload.prompt.as_deref().unwrap_or("").trim();
+            if prompt.is_empty() {
+                None
+            } else {
+                // Store the latest prompt so the focused hero card can show
+                // it as a subtitle. Dock cards (minimal/small/medium) ignore
+                // this field — a tiny card has no room for a user message.
+                if let Some(manager) = app_handle.try_state::<SessionManager>() {
+                    let preview = prompt_preview(prompt);
+                    if let Some(stored) = manager.update_current_prompt(session_id, &preview) {
+                        let _ = app_handle.emit(
+                            &format!("session-prompt-{session_id}"),
+                            serde_json::json!({
+                                "sessionId": session_id,
+                                "prompt": stored,
+                            }),
+                        );
+                    }
+                }
+                // Do not add a timeline entry for the prompt itself — the
+                // status transition to "working" already captures the event
+                // and flooding the timeline with user text is noisy.
+                None
+            }
         }
         HookEvent::PostCompact => {
             if let (Some(before), Some(after)) = (payload.tokens_before, payload.tokens_after) {
@@ -320,6 +347,43 @@ fn describe_tool(
     }
 }
 
+/// Collapse a raw user prompt into a one-line preview suitable for the
+/// hero card's subtitle. Takes the first non-empty line, truncates on a
+/// word boundary at ~120 chars. We keep slash-command prefixes intact
+/// because they signal intent (`/plan`, `/commit`) — stripping them would
+/// hide useful context from the user glancing at the card.
+fn prompt_preview(prompt: &str) -> String {
+    const MAX_LEN: usize = 120;
+
+    let first_line = prompt
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .trim();
+
+    if first_line.chars().count() <= MAX_LEN {
+        return first_line.to_string();
+    }
+
+    // Truncate on the last whitespace boundary before MAX_LEN chars so we
+    // don't slice through a word.
+    let mut end = 0usize;
+    let mut last_space = 0usize;
+    for (i, ch) in first_line.char_indices() {
+        let char_idx = first_line[..i].chars().count();
+        if char_idx >= MAX_LEN {
+            break;
+        }
+        end = i + ch.len_utf8();
+        if ch.is_whitespace() {
+            last_space = i;
+        }
+    }
+    let cut = if last_space > 0 { last_space } else { end };
+    format!("{}…", &first_line[..cut].trim_end())
+}
+
 /// Truncate a string to max length, appending "…" if truncated.
 fn truncate_str(s: &str, max: usize) -> &str {
     if s.len() <= max {
@@ -360,5 +424,48 @@ fn classify_bash(cmd: &str) -> &'static str {
         "lint"
     } else {
         "command"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::prompt_preview;
+
+    #[test]
+    fn short_prompt_kept_whole() {
+        assert_eq!(prompt_preview("fix auth middleware"), "fix auth middleware");
+    }
+
+    #[test]
+    fn uses_first_non_empty_line() {
+        assert_eq!(
+            prompt_preview("\n\n  add dark mode toggle\nand polish it"),
+            "add dark mode toggle",
+        );
+    }
+
+    #[test]
+    fn keeps_slash_command_intent() {
+        // Unlike a title, a subtitle should preserve `/plan` et al. because
+        // the command is informative context, not noise.
+        assert_eq!(
+            prompt_preview("/plan refactor the session reducer"),
+            "/plan refactor the session reducer",
+        );
+    }
+
+    #[test]
+    fn long_prompt_truncates_on_word_boundary() {
+        let prompt = "refactor the session manager to support optimistic updates across the reducer and context provider and then ship it to production";
+        let preview = prompt_preview(prompt);
+        assert!(preview.ends_with('…'));
+        assert!(preview.chars().count() <= 121); // 120 + …
+        assert!(!preview.contains("producti…")); // must cut at a space
+    }
+
+    #[test]
+    fn empty_prompt_returns_empty() {
+        assert_eq!(prompt_preview(""), "");
+        assert_eq!(prompt_preview("   \n  "), "");
     }
 }

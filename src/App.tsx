@@ -16,6 +16,7 @@ import { useStatus } from "./hooks/useStatus";
 import { useHookEvents } from "./hooks/useHookEvents";
 import { useSessionTypes } from "./hooks/useSessionTypes";
 import { trackEvent } from "./lib/telemetry";
+import { MOOD_STORAGE_KEY, isMoodTheme } from "./themes";
 import {
   getRecentSessions,
   addRecentSession,
@@ -321,8 +322,19 @@ function AppContent() {
 
   // Track app launch once on mount
   useEffect(() => {
+    // Snapshot the persistent mood theme so adoption can be measured on a
+    // daily-active basis, not just via change events. Reads the same
+    // localStorage cache the FOUC script and useMoodTheme hook use.
+    let moodTheme = "zen";
+    try {
+      const stored = localStorage.getItem(MOOD_STORAGE_KEY);
+      if (isMoodTheme(stored)) moodTheme = stored;
+    } catch {
+      /* ignore */
+    }
     trackEvent("app.launched", "app-lifecycle", {
       session_count: sessions.length,
+      mood_theme: moodTheme,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

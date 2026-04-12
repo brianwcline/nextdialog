@@ -33,6 +33,8 @@ pub struct Settings {
     pub background_mode: String,
     #[serde(default)]
     pub background_image_path: String,
+    #[serde(default = "default_mood_theme")]
+    pub mood_theme: String,
 }
 
 fn default_hooks_enabled() -> bool {
@@ -51,6 +53,10 @@ fn default_background_mode() -> String {
     "gradient".to_string()
 }
 
+fn default_mood_theme() -> String {
+    "zen".to_string()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -67,6 +73,7 @@ impl Default for Settings {
             hook_port_end: 7499,
             background_mode: "gradient".to_string(),
             background_image_path: String::new(),
+            mood_theme: "zen".to_string(),
         }
     }
 }
