@@ -25,6 +25,9 @@ pub struct HookPayload {
     pub tokens_before: Option<u64>,
     pub tokens_after: Option<u64>,
 
+    // ── UserPromptSubmit fields (v2.1.94+) ──
+    pub prompt: Option<String>,
+
     // Catch-all for unknown fields
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -39,6 +42,7 @@ pub enum HookEvent {
     SessionStart,
     SessionEnd,
     PostCompact,
+    UserPromptSubmit,
     Unknown(String),
 }
 
@@ -51,6 +55,7 @@ impl HookPayload {
             Some("SessionStart") => HookEvent::SessionStart,
             Some("SessionEnd") => HookEvent::SessionEnd,
             Some("PostCompact") => HookEvent::PostCompact,
+            Some("UserPromptSubmit") => HookEvent::UserPromptSubmit,
             Some(other) => HookEvent::Unknown(other.to_string()),
             None => HookEvent::Unknown("(missing)".to_string()),
         }

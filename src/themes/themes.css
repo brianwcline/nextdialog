@@ -1,0 +1,1041 @@
+/*
+ * NextDialog Mood Themes
+ * ======================
+ * Six visual personalities. Zen is the default (no `data-theme` attribute on
+ * body). Each non-default theme is scoped to `body[data-theme="<name>"]` and
+ * re-themes the card grid surface without touching the layout engine.
+ *
+ * Ported from product-manager/experiments/smart-layout/index.html (lines
+ * 457–1520). The experiment uses `body.theme-<name>` class names; this port
+ * uses `body[data-theme="<name>"]` attributes so the FOUC-prevention script
+ * in index.html can set them synchronously before React mounts.
+ *
+ * Elements the themes target (add these classnames when building new
+ * components so themes continue to work):
+ *   .card, .card.focused
+ *   .card-header, .card-body, .card-footer
+ *   .card-name, .card-path, .card-notification, .card-preview, .card-time
+ *   .status-row, .status-label, .status-dot
+ *   .badge, .agent-icon
+ *   .dock-divider (with a single <span> child for the label)
+ *   .grid-container, .grid-container.hybrid-mode
+ *
+ * `.hero-preview` and footer caption styling are intentionally omitted —
+ * NextDialog doesn't render terminal previews inside cards or a page-level
+ * footer. If those are added later, see experiment lines 225–254 and
+ * 1522–1541 for the source rules.
+ */
+
+/* =================================================================
+   Theme stacking context.
+   Non-default themes paint fixed-position decorations via body::before
+   and body::after at z-index 1. #root has no explicit positioning, so
+   without this rule the theme decorations paint on top of all React
+   content. This rule applies only when a data-theme attribute is set,
+   leaving Zen (default, no attribute) untouched.
+   ================================================================= */
+body[data-theme] #root {
+  position: relative;
+  z-index: 10;
+}
+
+/* =================================================================
+   Base dock-divider — works in all themes unless overridden.
+   Uses ::before and ::after for the horizontal lines so themes can
+   override them cleanly.
+   ================================================================= */
+.dock-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dock-divider::before,
+.dock-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.3);
+}
+.dock-divider span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(148, 163, 184, 0.7);
+  font-weight: 500;
+  padding: 0 4px;
+}
+
+/* =================================================================
+   THEME: BAUHAUS (1920s German modernism, Herbert Bayer / Moholy-Nagy)
+   Bold primary colors, geometric shapes, flat, no animation.
+   ================================================================= */
+body[data-theme="bauhaus"] {
+  background: #f2efea;
+  font-family: "DM Sans", "Futura", system-ui, sans-serif;
+  --nd-bg-layer-display: none;
+}
+
+body[data-theme="bauhaus"]::before {
+  content: "";
+  position: fixed;
+  top: 8%;
+  left: -4%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: #e63946;
+  z-index: 1;
+  opacity: 0.92;
+}
+body[data-theme="bauhaus"]::after {
+  content: "";
+  position: fixed;
+  bottom: 12%;
+  right: -6%;
+  width: 0;
+  height: 0;
+  border-left: 160px solid transparent;
+  border-right: 160px solid transparent;
+  border-bottom: 260px solid #ffd23f;
+  transform: rotate(22deg);
+  z-index: 1;
+  opacity: 0.85;
+}
+
+body[data-theme="bauhaus"] .card {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border: 2px solid #0b0b0b !important;
+  border-radius: 0 !important;
+  box-shadow: 5px 5px 0 #0b0b0b !important;
+  animation: none !important;
+  filter: none !important;
+}
+body[data-theme="bauhaus"] .card[data-status="planning"] {
+  background: #ffffff !important;
+  border-left: 8px solid #1d3557 !important;
+}
+body[data-theme="bauhaus"] .card[data-status="working"] {
+  background: #ffffff !important;
+  border-left: 8px solid #1d3557 !important;
+}
+body[data-theme="bauhaus"] .card[data-status="waiting"] {
+  background: #ffd23f !important;
+  border-left: 8px solid #e63946 !important;
+}
+body[data-theme="bauhaus"] .card[data-status="starting"] {
+  background: #ffffff !important;
+  border-left: 8px solid #2a9d8f !important;
+}
+body[data-theme="bauhaus"] .card[data-status="idle"] {
+  background: #ffffff !important;
+}
+
+body[data-theme="bauhaus"] .card.focused {
+  background: #1d3557 !important;
+  color: #ffd23f !important;
+  border-color: #0b0b0b !important;
+  box-shadow: 8px 8px 0 #e63946 !important;
+}
+body[data-theme="bauhaus"] .card.focused .card-name,
+body[data-theme="bauhaus"] .card.focused .card-path,
+body[data-theme="bauhaus"] .card.focused .status-label,
+body[data-theme="bauhaus"] .card.focused .card-preview,
+body[data-theme="bauhaus"] .card.focused .card-time {
+  color: #ffd23f !important;
+}
+
+body[data-theme="bauhaus"] .card-name {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: #0b0b0b !important;
+}
+body[data-theme="bauhaus"] .card[data-size="minimal"] .card-name {
+  font-size: 15px !important;
+}
+body[data-theme="bauhaus"] .card-path {
+  font-family: "Geist Mono", monospace !important;
+  font-size: 11px !important;
+  color: #6b6b6b !important;
+}
+body[data-theme="bauhaus"] .status-label {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.12em !important;
+  color: #0b0b0b !important;
+}
+body[data-theme="bauhaus"] .badge {
+  background: #e63946 !important;
+  color: #ffffff !important;
+  border-radius: 0 !important;
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  padding: 3px 7px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+}
+body[data-theme="bauhaus"] .card.focused .badge {
+  background: #ffd23f !important;
+  color: #0b0b0b !important;
+}
+body[data-theme="bauhaus"] .card[data-status="waiting"] .card-notification {
+  color: #0b0b0b !important;
+  font-weight: 700 !important;
+}
+
+body[data-theme="bauhaus"] .status-dot {
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: 2px solid #0b0b0b !important;
+  background: #ffffff !important;
+  position: relative;
+}
+/* Hide the default inner indicator span — themes paint the outer wrapper */
+body[data-theme="bauhaus"] .status-dot > span {
+  display: none !important;
+}
+body[data-theme="bauhaus"] .card[data-status="waiting"] .status-dot {
+  background: #e63946 !important;
+  border-radius: 50% !important;
+}
+body[data-theme="bauhaus"] .card[data-status="planning"] .status-dot {
+  border: none !important;
+  background: #1d3557 !important;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  width: 16px !important;
+  height: 14px !important;
+}
+body[data-theme="bauhaus"] .card[data-status="working"] .status-dot {
+  background: #1d3557 !important;
+  border-radius: 50% !important;
+}
+body[data-theme="bauhaus"] .card[data-status="starting"] .status-dot {
+  background: #2a9d8f !important;
+}
+
+body[data-theme="bauhaus"] .agent-icon {
+  background: #ffd23f !important;
+  border: 2px solid #0b0b0b !important;
+  border-radius: 0 !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+
+body[data-theme="bauhaus"] .card-footer {
+  border-top: 1.5px solid #0b0b0b !important;
+}
+body[data-theme="bauhaus"] .card-preview {
+  color: #6b6b6b !important;
+  text-transform: none !important;
+}
+body[data-theme="bauhaus"] .dock-divider span {
+  color: #0b0b0b !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.14em !important;
+  background: #f2efea !important;
+  padding: 0 10px !important;
+}
+body[data-theme="bauhaus"] .dock-divider::before,
+body[data-theme="bauhaus"] .dock-divider::after {
+  background: #0b0b0b !important;
+  height: 2px !important;
+}
+body[data-theme="bauhaus"] .card-notification {
+  color: #e63946 !important;
+  font-weight: 600 !important;
+}
+
+/* =================================================================
+   THEME: MEMPHIS (1980s Italian, Ettore Sottsass)
+   Playful confetti, pastels + primaries, squiggles, terrazzo.
+   ================================================================= */
+body[data-theme="memphis"] {
+  background: #fdf9f0;
+  font-family: "DM Sans", "Poppins", system-ui, sans-serif;
+  --nd-bg-layer-display: none;
+}
+
+body[data-theme="memphis"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background-image:
+    radial-gradient(circle at 12% 18%, #ff6b9d 0 7px, transparent 8px),
+    radial-gradient(circle at 88% 14%, #5ed2b8 0 5px, transparent 6px),
+    radial-gradient(circle at 6% 72%, #4ec5e8 0 9px, transparent 10px),
+    radial-gradient(circle at 72% 86%, #ffd447 0 6px, transparent 7px),
+    radial-gradient(circle at 42% 46%, #b48ee5 0 4px, transparent 5px),
+    radial-gradient(circle at 24% 92%, #ff8566 0 5px, transparent 6px),
+    radial-gradient(circle at 94% 58%, #ff6b9d 0 4px, transparent 5px),
+    radial-gradient(circle at 56% 8%, #4ec5e8 0 5px, transparent 6px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+body[data-theme="memphis"]::after {
+  content: "";
+  position: fixed;
+  top: 4%;
+  right: 3%;
+  width: 140px;
+  height: 36px;
+  background-image:
+    radial-gradient(circle at 10px 18px, #1a1a1a 3px, transparent 4px),
+    radial-gradient(circle at 30px 18px, #1a1a1a 3px, transparent 4px),
+    radial-gradient(circle at 50px 18px, #1a1a1a 3px, transparent 4px),
+    radial-gradient(circle at 70px 18px, #1a1a1a 3px, transparent 4px),
+    radial-gradient(circle at 90px 18px, #1a1a1a 3px, transparent 4px),
+    radial-gradient(circle at 110px 18px, #1a1a1a 3px, transparent 4px),
+    radial-gradient(circle at 130px 18px, #1a1a1a 3px, transparent 4px);
+  z-index: 2;
+  opacity: 0.45;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+body[data-theme="memphis"] .card {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border: 2.5px solid #1a1a1a !important;
+  border-radius: 18px !important;
+  box-shadow: 5px 5px 0 #1a1a1a !important;
+  animation: none !important;
+  filter: none !important;
+}
+body[data-theme="memphis"] .card[data-status="planning"] {
+  box-shadow: 5px 5px 0 #b48ee5 !important;
+}
+body[data-theme="memphis"] .card[data-status="working"] {
+  box-shadow: 5px 5px 0 #4ec5e8 !important;
+}
+body[data-theme="memphis"] .card[data-status="waiting"] {
+  background: #fff2a8 !important;
+  box-shadow: 5px 5px 0 #ff6b9d !important;
+}
+body[data-theme="memphis"] .card[data-status="starting"] {
+  box-shadow: 5px 5px 0 #5ed2b8 !important;
+}
+body[data-theme="memphis"] .card[data-status="idle"] {
+  box-shadow: 5px 5px 0 #1a1a1a !important;
+}
+
+body[data-theme="memphis"] .card.focused {
+  background: #ffd447 !important;
+  color: #1a1a1a !important;
+  border-color: #1a1a1a !important;
+  border-radius: 22px !important;
+  box-shadow: 8px 8px 0 #ff6b9d !important;
+}
+body[data-theme="memphis"] .card.focused .card-name,
+body[data-theme="memphis"] .card.focused .card-path,
+body[data-theme="memphis"] .card.focused .status-label,
+body[data-theme="memphis"] .card.focused .card-preview,
+body[data-theme="memphis"] .card.focused .card-time {
+  color: #1a1a1a !important;
+  opacity: 1 !important;
+}
+body[data-theme="memphis"] .card.focused .card-path {
+  font-weight: 600 !important;
+}
+body[data-theme="memphis"] .card.focused .card-time {
+  font-weight: 700 !important;
+}
+
+body[data-theme="memphis"] .card-name {
+  font-size: 21px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: #1a1a1a !important;
+}
+body[data-theme="memphis"] .card[data-size="minimal"] .card-name {
+  font-size: 14px !important;
+}
+body[data-theme="memphis"] .card-path {
+  font-family: "Geist Mono", monospace !important;
+  font-size: 11px !important;
+  color: #6b6b6b !important;
+}
+body[data-theme="memphis"] .status-label {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.12em !important;
+  color: #1a1a1a !important;
+}
+body[data-theme="memphis"] .badge {
+  background: #4ec5e8 !important;
+  color: #1a1a1a !important;
+  border: 1.5px solid #1a1a1a !important;
+  border-radius: 999px !important;
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  padding: 3px 9px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+}
+body[data-theme="memphis"] .card.focused .badge {
+  background: #ff6b9d !important;
+  color: #ffffff !important;
+  border-color: #1a1a1a !important;
+}
+body[data-theme="memphis"] .card[data-status="waiting"] .card-notification {
+  color: #1a1a1a !important;
+  font-weight: 700 !important;
+}
+
+body[data-theme="memphis"] .status-dot {
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  border: 2px solid #1a1a1a !important;
+  background: #ffffff !important;
+}
+body[data-theme="memphis"] .status-dot > span {
+  display: none !important;
+}
+body[data-theme="memphis"] .card[data-status="waiting"] .status-dot {
+  background: #ff6b9d !important;
+}
+body[data-theme="memphis"] .card[data-status="planning"] .status-dot {
+  background: #b48ee5 !important;
+}
+body[data-theme="memphis"] .card[data-status="working"] .status-dot {
+  background: #4ec5e8 !important;
+}
+body[data-theme="memphis"] .card[data-status="starting"] .status-dot {
+  background: #5ed2b8 !important;
+}
+body[data-theme="memphis"] .card[data-status="idle"] .status-dot {
+  background: #fdf9f0 !important;
+}
+
+body[data-theme="memphis"] .agent-icon {
+  background: #5ed2b8 !important;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 10px !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+
+body[data-theme="memphis"] .card-footer {
+  border-top: 1.5px dashed #1a1a1a !important;
+}
+body[data-theme="memphis"] .card-preview {
+  color: #6b6b6b !important;
+  text-transform: none !important;
+}
+body[data-theme="memphis"] .dock-divider span {
+  color: #1a1a1a !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.14em !important;
+  background: #fdf9f0 !important;
+  padding: 0 10px !important;
+}
+body[data-theme="memphis"] .dock-divider::before,
+body[data-theme="memphis"] .dock-divider::after {
+  background: repeating-linear-gradient(
+    90deg,
+    #1a1a1a 0 6px,
+    transparent 6px 12px
+  ) !important;
+  height: 2px !important;
+}
+body[data-theme="memphis"] .card-notification {
+  color: #ff6b9d !important;
+  font-weight: 700 !important;
+}
+
+/* =================================================================
+   THEME: BENTO (Japanese compartment grid)
+   Soft warm gray, pastel tint cells, minimal borders, gentle shadow.
+   ================================================================= */
+body[data-theme="bento"] {
+  background: #efede6;
+  font-family: "DM Sans", "Inter", system-ui, sans-serif;
+  --nd-bg-layer-display: none;
+}
+
+body[data-theme="bento"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(255, 255, 255, 0.5), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(0, 0, 0, 0.025), transparent 50%);
+  pointer-events: none;
+}
+
+body[data-theme="bento"] .card {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border: 1px solid #e5e2d9 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 8px rgba(40, 35, 25, 0.04) !important;
+  animation: none !important;
+  filter: none !important;
+}
+body[data-theme="bento"] .card[data-status="planning"] {
+  background: #efe9f5 !important;
+  border-color: #ddd3ea !important;
+}
+body[data-theme="bento"] .card[data-status="working"] {
+  background: #e5eef6 !important;
+  border-color: #cddeec !important;
+}
+body[data-theme="bento"] .card[data-status="waiting"] {
+  background: #fbebd8 !important;
+  border-color: #f0d5b0 !important;
+}
+body[data-theme="bento"] .card[data-status="starting"] {
+  background: #e4f0ea !important;
+  border-color: #cee2d5 !important;
+}
+body[data-theme="bento"] .card[data-status="idle"] {
+  background: #f7f5ee !important;
+  border-color: #e5e2d9 !important;
+}
+
+body[data-theme="bento"] .card.focused {
+  background: #2e2a24 !important;
+  color: #f7f5ee !important;
+  border-color: #2e2a24 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.18) !important;
+}
+body[data-theme="bento"] .card.focused .card-name,
+body[data-theme="bento"] .card.focused .card-path,
+body[data-theme="bento"] .card.focused .status-label,
+body[data-theme="bento"] .card.focused .card-preview,
+body[data-theme="bento"] .card.focused .card-time {
+  color: #f7f5ee !important;
+  opacity: 1 !important;
+}
+body[data-theme="bento"] .card.focused .card-path {
+  color: rgba(247, 245, 238, 0.6) !important;
+}
+
+body[data-theme="bento"] .card-name {
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.012em !important;
+  color: #2e2a24 !important;
+}
+body[data-theme="bento"] .card[data-size="minimal"] .card-name {
+  font-size: 14px !important;
+}
+body[data-theme="bento"] .card-path {
+  font-family: "Geist Mono", monospace !important;
+  font-size: 11px !important;
+  color: #8a8679 !important;
+}
+body[data-theme="bento"] .status-label {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  color: #5a5750 !important;
+}
+body[data-theme="bento"] .badge {
+  background: rgba(46, 42, 36, 0.08) !important;
+  color: #5a5750 !important;
+  border: none !important;
+  border-radius: 6px !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+  padding: 3px 8px !important;
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+}
+body[data-theme="bento"] .card.focused .badge {
+  background: rgba(247, 245, 238, 0.15) !important;
+  color: #f7f5ee !important;
+}
+
+body[data-theme="bento"] .status-dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+body[data-theme="bento"] .status-dot > span {
+  background: currentColor !important;
+}
+body[data-theme="bento"] .card[data-status="waiting"] .status-dot > span {
+  background: #e8a94a !important;
+}
+body[data-theme="bento"] .card[data-status="planning"] .status-dot > span {
+  background: #9b7fbf !important;
+}
+body[data-theme="bento"] .card[data-status="working"] .status-dot > span {
+  background: #5b8dbe !important;
+}
+body[data-theme="bento"] .card[data-status="starting"] .status-dot > span {
+  background: #6cae87 !important;
+}
+body[data-theme="bento"] .card[data-status="idle"] .status-dot > span {
+  background: #b8b4a7 !important;
+}
+
+body[data-theme="bento"] .agent-icon {
+  background: rgba(46, 42, 36, 0.06) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+body[data-theme="bento"] .card.focused .agent-icon {
+  background: rgba(247, 245, 238, 0.15) !important;
+}
+
+body[data-theme="bento"] .card-footer {
+  border-top: 1px solid rgba(46, 42, 36, 0.08) !important;
+}
+body[data-theme="bento"] .card.focused .card-footer {
+  border-top-color: rgba(247, 245, 238, 0.12) !important;
+}
+body[data-theme="bento"] .card-preview {
+  color: #8a8679 !important;
+  text-transform: none !important;
+}
+body[data-theme="bento"] .dock-divider span {
+  color: #7a766c !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+  background: #efede6 !important;
+  padding: 0 12px !important;
+  font-size: 10px !important;
+}
+body[data-theme="bento"] .dock-divider::before,
+body[data-theme="bento"] .dock-divider::after {
+  background: rgba(46, 42, 36, 0.1) !important;
+  height: 1px !important;
+}
+body[data-theme="bento"] .card-notification {
+  color: #b8751f !important;
+  font-weight: 600 !important;
+}
+
+/* =================================================================
+   THEME: RISOGRAPH (spot-color ink print, slight offset)
+   Paper-textured cream, pink + teal + navy inks, grainy, overprint feel.
+   ================================================================= */
+body[data-theme="risograph"] {
+  background: #fff9ec;
+  font-family: "DM Sans", "Inter", system-ui, sans-serif;
+  --nd-bg-layer-display: none;
+}
+
+body[data-theme="risograph"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.1  0 0 0 0 0.1  0 0 0 0.45 0'/></filter><rect width='300' height='300' filter='url(%23n)'/></svg>");
+  opacity: 0.25;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+body[data-theme="risograph"]::after {
+  content: "";
+  position: fixed;
+  top: 6%;
+  right: -8%;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, #ff4f8b 0%, #ff4f8b 48%, transparent 62%);
+  filter: blur(18px);
+  opacity: 0.3;
+  mix-blend-mode: multiply;
+  z-index: 1;
+  pointer-events: none;
+}
+
+body[data-theme="risograph"] .card {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  border: 2px solid #1a2b5c !important;
+  border-radius: 6px !important;
+  box-shadow: 4px 4px 0 #ff4f8b !important;
+  animation: none !important;
+  filter: none !important;
+}
+body[data-theme="risograph"] .card[data-status="planning"] {
+  background: #e8e5f2 !important;
+  box-shadow: 4px 4px 0 #1a2b5c !important;
+}
+body[data-theme="risograph"] .card[data-status="working"] {
+  background: #d9eeeb !important;
+  box-shadow: 4px 4px 0 #2eb5a8 !important;
+}
+body[data-theme="risograph"] .card[data-status="waiting"] {
+  background: #ffe0eb !important;
+  box-shadow: 4px 4px 0 #ff4f8b !important;
+}
+body[data-theme="risograph"] .card[data-status="starting"] {
+  background: #d9eeeb !important;
+  box-shadow: 4px 4px 0 #2eb5a8 !important;
+}
+body[data-theme="risograph"] .card[data-status="idle"] {
+  background: #ffffff !important;
+  box-shadow: 4px 4px 0 #1a2b5c !important;
+}
+
+body[data-theme="risograph"] .card.focused {
+  background: #1a2b5c !important;
+  color: #fff9ec !important;
+  border-color: #1a2b5c !important;
+  box-shadow:
+    7px 7px 0 #ff4f8b,
+    14px 14px 0 #2eb5a8 !important;
+}
+body[data-theme="risograph"] .card.focused .card-name,
+body[data-theme="risograph"] .card.focused .card-path,
+body[data-theme="risograph"] .card.focused .status-label,
+body[data-theme="risograph"] .card.focused .card-preview,
+body[data-theme="risograph"] .card.focused .card-time {
+  color: #fff9ec !important;
+  opacity: 1 !important;
+}
+
+body[data-theme="risograph"] .card-name {
+  font-size: 21px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  color: #1a2b5c !important;
+}
+body[data-theme="risograph"] .card[data-size="minimal"] .card-name {
+  font-size: 14px !important;
+}
+body[data-theme="risograph"] .card-path {
+  font-family: "Geist Mono", monospace !important;
+  font-size: 11px !important;
+  color: #5b6b8f !important;
+}
+body[data-theme="risograph"] .status-label {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.12em !important;
+  color: #1a2b5c !important;
+}
+body[data-theme="risograph"] .badge {
+  background: #2eb5a8 !important;
+  color: #fff9ec !important;
+  border-radius: 3px !important;
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  padding: 3px 7px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+}
+body[data-theme="risograph"] .card.focused .badge {
+  background: #ff4f8b !important;
+  color: #fff9ec !important;
+}
+
+body[data-theme="risograph"] .status-dot {
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  border: 2px solid #1a2b5c !important;
+  background: #fff9ec !important;
+}
+body[data-theme="risograph"] .status-dot > span {
+  display: none !important;
+}
+body[data-theme="risograph"] .card[data-status="waiting"] .status-dot {
+  background: #ff4f8b !important;
+}
+body[data-theme="risograph"] .card[data-status="planning"] .status-dot {
+  background: #1a2b5c !important;
+}
+body[data-theme="risograph"] .card[data-status="working"] .status-dot {
+  background: #2eb5a8 !important;
+}
+body[data-theme="risograph"] .card[data-status="starting"] .status-dot {
+  background: #2eb5a8 !important;
+}
+
+body[data-theme="risograph"] .agent-icon {
+  background: #ff4f8b !important;
+  border: 2px solid #1a2b5c !important;
+  border-radius: 6px !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+
+body[data-theme="risograph"] .card-footer {
+  border-top: 1.5px dashed #1a2b5c !important;
+}
+body[data-theme="risograph"] .card.focused .card-footer {
+  border-top-color: rgba(255, 249, 236, 0.3) !important;
+}
+body[data-theme="risograph"] .card-preview {
+  color: #5b6b8f !important;
+}
+body[data-theme="risograph"] .card[data-status="waiting"] .card-preview {
+  color: #1a2b5c !important;
+}
+body[data-theme="risograph"] .card[data-status="waiting"] .card-notification {
+  color: #1a2b5c !important;
+  font-weight: 700 !important;
+}
+body[data-theme="risograph"] .dock-divider span {
+  color: #1a2b5c !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.12em !important;
+  background: #fff9ec !important;
+  padding: 0 10px !important;
+}
+body[data-theme="risograph"] .dock-divider::before,
+body[data-theme="risograph"] .dock-divider::after {
+  background: #1a2b5c !important;
+  height: 1.5px !important;
+}
+body[data-theme="risograph"] .card-notification {
+  color: #ff4f8b !important;
+  font-weight: 700 !important;
+}
+
+/* =================================================================
+   THEME: SYNTHWAVE (80s retrofuturism)
+   Dark purple gradient, neon pink/cyan glows, chrome, grid horizon.
+   ================================================================= */
+body[data-theme="synthwave"] {
+  background: #0d0221;
+  font-family: "Inter", system-ui, sans-serif;
+  color: #f2d6ff;
+  --nd-bg-layer-display: none;
+}
+
+body[data-theme="synthwave"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(
+      ellipse at 50% 100%,
+      #ff2e88 0%,
+      #9a2dca 18%,
+      #3a0a6a 38%,
+      #0d0221 60%
+    ),
+    linear-gradient(to bottom, #0d0221 0%, #1a0533 40%, #2a0a4a 70%);
+  pointer-events: none;
+}
+body[data-theme="synthwave"]::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40%;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(94, 240, 242, 0.28) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(94, 240, 242, 0.28) 1px, transparent 1px);
+  background-size: 40px 36px;
+  transform: perspective(380px) rotateX(60deg);
+  transform-origin: center top;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 40%,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 40%,
+    black 100%
+  );
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+body[data-theme="synthwave"] .card {
+  background: rgba(26, 5, 51, 0.72) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1.5px solid rgba(94, 240, 242, 0.35) !important;
+  border-radius: 10px !important;
+  box-shadow:
+    0 0 20px rgba(255, 46, 136, 0.15),
+    inset 0 0 20px rgba(94, 240, 242, 0.05) !important;
+  animation: none !important;
+  filter: none !important;
+  color: #f2d6ff !important;
+}
+body[data-theme="synthwave"] .card[data-status="planning"] {
+  border-color: rgba(184, 106, 248, 0.6) !important;
+  box-shadow: 0 0 22px rgba(184, 106, 248, 0.3) !important;
+}
+body[data-theme="synthwave"] .card[data-status="working"] {
+  border-color: rgba(94, 240, 242, 0.6) !important;
+  box-shadow: 0 0 22px rgba(94, 240, 242, 0.3) !important;
+}
+body[data-theme="synthwave"] .card[data-status="waiting"] {
+  border-color: rgba(255, 46, 136, 0.7) !important;
+  box-shadow: 0 0 26px rgba(255, 46, 136, 0.4) !important;
+}
+body[data-theme="synthwave"] .card[data-status="starting"] {
+  border-color: rgba(140, 255, 170, 0.6) !important;
+  box-shadow: 0 0 22px rgba(140, 255, 170, 0.3) !important;
+}
+body[data-theme="synthwave"] .card[data-status="idle"] {
+  border-color: rgba(94, 240, 242, 0.25) !important;
+  box-shadow: 0 0 14px rgba(94, 240, 242, 0.12) !important;
+}
+
+body[data-theme="synthwave"] .card.focused {
+  background: rgba(13, 2, 33, 0.9) !important;
+  border: 2px solid #ff2e88 !important;
+  box-shadow:
+    0 0 40px rgba(255, 46, 136, 0.6),
+    0 0 80px rgba(255, 46, 136, 0.3),
+    inset 0 0 30px rgba(94, 240, 242, 0.15) !important;
+}
+body[data-theme="synthwave"] .card.focused .card-name {
+  color: #ffffff !important;
+  text-shadow:
+    0 0 12px rgba(255, 46, 136, 0.8),
+    0 0 24px rgba(255, 46, 136, 0.4) !important;
+  opacity: 1 !important;
+}
+body[data-theme="synthwave"] .card.focused .card-path {
+  color: #5df0f2 !important;
+  opacity: 1 !important;
+}
+body[data-theme="synthwave"] .card.focused .status-label {
+  color: #5df0f2 !important;
+  opacity: 1 !important;
+}
+body[data-theme="synthwave"] .card.focused .card-preview,
+body[data-theme="synthwave"] .card.focused .card-time {
+  color: #f2d6ff !important;
+  opacity: 1 !important;
+}
+
+body[data-theme="synthwave"] .card-name {
+  font-size: 21px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  color: #ffffff !important;
+  text-shadow: 0 0 10px rgba(255, 46, 136, 0.4) !important;
+}
+body[data-theme="synthwave"] .card[data-size="minimal"] .card-name {
+  font-size: 14px !important;
+}
+body[data-theme="synthwave"] .card-path {
+  font-family: "Geist Mono", monospace !important;
+  font-size: 11px !important;
+  color: #9d7dbe !important;
+}
+body[data-theme="synthwave"] .status-label {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.14em !important;
+  color: #5df0f2 !important;
+  text-shadow: 0 0 6px rgba(94, 240, 242, 0.6) !important;
+}
+body[data-theme="synthwave"] .badge {
+  background: rgba(94, 240, 242, 0.15) !important;
+  color: #5df0f2 !important;
+  border: 1px solid rgba(94, 240, 242, 0.5) !important;
+  border-radius: 999px !important;
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  text-shadow: 0 0 6px rgba(94, 240, 242, 0.6) !important;
+}
+body[data-theme="synthwave"] .card.focused .badge {
+  background: rgba(255, 46, 136, 0.2) !important;
+  color: #ff2e88 !important;
+  border-color: rgba(255, 46, 136, 0.6) !important;
+  text-shadow: 0 0 6px rgba(255, 46, 136, 0.8) !important;
+}
+
+body[data-theme="synthwave"] .status-dot {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+body[data-theme="synthwave"] .status-dot > span {
+  background: currentColor !important;
+}
+body[data-theme="synthwave"] .card[data-status="waiting"] .status-dot > span {
+  background: #ff2e88 !important;
+  box-shadow: 0 0 10px #ff2e88 !important;
+}
+body[data-theme="synthwave"] .card[data-status="planning"] .status-dot > span {
+  background: #b86af8 !important;
+  box-shadow: 0 0 10px #b86af8 !important;
+}
+body[data-theme="synthwave"] .card[data-status="working"] .status-dot > span {
+  background: #5df0f2 !important;
+  box-shadow: 0 0 10px #5df0f2 !important;
+}
+body[data-theme="synthwave"] .card[data-status="starting"] .status-dot > span {
+  background: #8cffaa !important;
+  box-shadow: 0 0 10px #8cffaa !important;
+}
+body[data-theme="synthwave"] .card[data-status="idle"] .status-dot > span {
+  background: #5df0f2 !important;
+  opacity: 0.5;
+}
+
+body[data-theme="synthwave"] .agent-icon {
+  background: rgba(94, 240, 242, 0.1) !important;
+  border: 1px solid rgba(94, 240, 242, 0.4) !important;
+  border-radius: 8px !important;
+  width: 30px !important;
+  height: 30px !important;
+}
+
+body[data-theme="synthwave"] .card-footer {
+  border-top: 1px solid rgba(94, 240, 242, 0.2) !important;
+}
+body[data-theme="synthwave"] .card-preview {
+  color: #9d7dbe !important;
+}
+body[data-theme="synthwave"] .dock-divider span {
+  color: #5df0f2 !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.14em !important;
+  background: #0d0221 !important;
+  padding: 0 12px !important;
+  text-shadow: 0 0 6px rgba(94, 240, 242, 0.6) !important;
+}
+body[data-theme="synthwave"] .dock-divider::before,
+body[data-theme="synthwave"] .dock-divider::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(94, 240, 242, 0.5),
+    transparent
+  ) !important;
+  height: 1px !important;
+}
+body[data-theme="synthwave"] .card-notification {
+  color: #ff2e88 !important;
+  font-weight: 600 !important;
+  text-shadow: 0 0 8px rgba(255, 46, 136, 0.5) !important;
+}

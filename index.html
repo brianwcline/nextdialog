@@ -7,6 +7,21 @@
     <title>NextDialog</title>
   </head>
   <body>
+    <script>
+      // FOUC prevention: apply the last-known mood theme synchronously
+      // before React mounts. Settings.mood_theme (Tauri) is source of truth
+      // and will override this on first load if they differ.
+      (function () {
+        try {
+          var t = localStorage.getItem("nd-mood");
+          if (t && t !== "zen") {
+            document.body.dataset.theme = t;
+          }
+        } catch (_) {
+          /* localStorage unavailable — default Zen theme applies */
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

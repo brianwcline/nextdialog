@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import type { Session, SessionType } from "../lib/types";
-import { SessionCard } from "./SessionCard";
+import { SmartGrid } from "./SmartGrid";
+import { MoodControls } from "./MoodControls";
 import { useUpdateCheck } from "../hooks/useUpdateCheck";
 
 interface HomeViewProps {
@@ -43,17 +44,6 @@ export function HomeView({
 }: HomeViewProps) {
   const { update } = useUpdateCheck();
   const isTerminalOpen = activeSessionId !== null;
-  const renderCards = (cards: Session[], startIndex: number) =>
-    cards.map((session, i) => (
-      <SessionCard
-        key={session.id}
-        session={session}
-        index={startIndex + i}
-        onClick={() => onSelectSession(session.id)}
-        onContextMenu={(e) => onSessionContextMenu(session.id, e)}
-        sessionType={sessionTypeMap[session.session_type]}
-      />
-    ));
 
   return (
     <div className="flex flex-col h-full">
@@ -78,6 +68,7 @@ export function HomeView({
               v{update.latestVersion} available
             </button>
           )}
+          <MoodControls />
           <button
             onClick={onOpenFeedback}
             className="px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:bg-white/40 hover:text-slate-700 transition-colors"
@@ -99,16 +90,13 @@ export function HomeView({
       {sessions.length === 0 ? (
         <EmptyState onNewSession={onNewSession} />
       ) : (
-        <div className="flex-1 overflow-y-auto flex items-center justify-center p-8 pb-20">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: isTerminalOpen ? 0 : 1, y: isTerminalOpen ? -20 : 0 }}
-            transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl w-full justify-items-center"
-          >
-            {renderCards(sessions, 0)}
-          </motion.div>
-        </div>
+        <SmartGrid
+          sessions={sessions}
+          isTerminalOpen={isTerminalOpen}
+          onOpenSession={onSelectSession}
+          onSessionContextMenu={onSessionContextMenu}
+          sessionTypeMap={sessionTypeMap}
+        />
       )}
 
       {/* Floating action button */}

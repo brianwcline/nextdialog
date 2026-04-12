@@ -8,6 +8,18 @@ export type SessionStatus =
   | "waiting"
   | "error";
 
+/** Size category used by the smart layout engine to drive card rendering. */
+export type SessionSize = "large" | "medium" | "small" | "minimal";
+
+/** Mood theme identifier. "zen" is the default un-themed state. */
+export type MoodTheme =
+  | "zen"
+  | "bauhaus"
+  | "memphis"
+  | "bento"
+  | "risograph"
+  | "synthwave";
+
 export interface Session {
   id: string;
   name: string;
@@ -21,9 +33,13 @@ export interface Session {
   parked: boolean;
   parent_id?: string;
   tuning?: SessionTuning;
+  /** Latest user prompt captured from a UserPromptSubmit hook. Rendered as a subtitle on the focused hero card only. */
+  current_prompt?: string;
   hookEnabled?: boolean;
   lastToolUse?: string;
   hookNotification?: string;
+  /** Populated at runtime by useTimelineCounts — not persisted. */
+  interactionCount?: number;
 }
 
 export interface TimelineEntry {

@@ -75,6 +75,7 @@ impl SessionManager {
             parked: false,
             parent_id: req.parent_id,
             tuning: None,
+            current_prompt: None,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -141,6 +142,25 @@ impl SessionManager {
         session.last_active = Utc::now();
         self.persist(&sessions);
         Ok(())
+    }
+
+    /// Record the latest user prompt on a session. The smart layout renders
+    /// this as a subtitle on the focused hero card; dock cards ignore it.
+    /// Every new prompt overwrites the previous one because the field
+    /// describes "what's happening now," not a frozen title.
+    /// Returns the stored preview if applied, `None` if skipped.
+    pub fn update_current_prompt(&self, id: &str, prompt: &str) -> Option<String> {
+        let trimmed = prompt.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions.iter_mut().find(|s| s.id == id)?;
+        session.current_prompt = Some(trimmed.to_string());
+        session.last_active = Utc::now();
+        let stored = session.current_prompt.clone();
+        self.persist(&sessions);
+        stored
     }
 
     pub fn get_tuning(&self, id: &str) -> Option<SessionTuning> {

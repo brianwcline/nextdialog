@@ -121,6 +121,10 @@ impl AgentAdapter for ClaudeCodeAdapter {
                     );
                 }
             }
+            HookEvent::UserPromptSubmit => {
+                // Title derivation is handled in hooks::processor via
+                // SessionManager; no timeline entry needed here.
+            }
             HookEvent::Unknown(_) => {}
         }
 

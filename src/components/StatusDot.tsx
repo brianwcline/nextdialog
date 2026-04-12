@@ -30,8 +30,14 @@ interface StatusDotProps {
 export function StatusDot({ status, size = 16 }: StatusDotProps) {
   const color = statusColors[status];
 
+  // Outer span carries the `status-dot` class so mood themes can target it
+  // (e.g., bauhaus repurposes the dot as a bordered square). The default
+  // zen theme uses the inline-styled inner span.
   return (
-    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }}>
+    <span
+      className="status-dot relative inline-flex shrink-0"
+      style={{ width: size, height: size }}
+    >
       <span
         className="inline-flex rounded-full w-full h-full"
         style={{ backgroundColor: color, boxShadow: statusGlows[status] }}

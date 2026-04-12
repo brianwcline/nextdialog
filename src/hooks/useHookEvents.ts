@@ -7,6 +7,11 @@ interface HookBash {
   activity: string;
 }
 
+interface HookPrompt {
+  sessionId: string;
+  prompt: string;
+}
+
 /**
  * Listen to Claude Code hook events (file writes, bash commands, notifications)
  * and dispatch updates to SessionContext.
@@ -72,6 +77,23 @@ export function useHookEvents(sessionIds: string[]) {
           type: "UPDATE_SESSION",
           id,
           updates: { lastToolUse: activity },
+        });
+      }).then((unlisten) => {
+        if (cancelled) unlisten();
+        else unlisteners.push(unlisten);
+      });
+
+      // Latest user prompt — rendered as a subtitle on the focused hero
+      // card only. Overwrites on every UserPromptSubmit so it reflects
+      // current context, never a frozen value.
+      listen<HookPrompt>(`session-prompt-${id}`, (event) => {
+        if (cancelled) return;
+        const prompt = event.payload?.prompt?.trim();
+        if (!prompt) return;
+        dispatch({
+          type: "UPDATE_SESSION",
+          id,
+          updates: { current_prompt: prompt },
         });
       }).then((unlisten) => {
         if (cancelled) unlisten();
