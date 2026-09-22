@@ -309,6 +309,16 @@ pub fn save_settings(manager: State<'_, SettingsManager>, settings: Settings) {
 
 // ── Session Parking ──
 
+/// Returns the stored (normalized) group name, `None` when ungrouped.
+#[tauri::command]
+pub fn set_session_group(
+    manager: State<'_, SessionManager>,
+    id: String,
+    group: Option<String>,
+) -> Result<Option<String>, String> {
+    manager.set_group(&id, group.as_deref())
+}
+
 #[tauri::command]
 pub fn park_session(manager: State<'_, SessionManager>, id: String) {
     manager.set_parked(&id, true);

@@ -88,6 +88,7 @@ pub fn run() {
             commands::get_session_preview,
             commands::get_session_activity,
             commands::park_session,
+            commands::set_session_group,
             commands::unpark_session,
             commands::get_file_conflicts,
             commands::list_session_types,

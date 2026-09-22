@@ -135,6 +135,9 @@ export function computeLayout(
   layout: LayoutMode,
   focusedSession: AttentionSession | null,
   containerWidth: number,
+  /** When false, the unfocused layout is plain masonry. Grouped sections use
+   *  this so every group doesn't open with its own full-width hero card. */
+  leadWithHero = true,
 ): LayoutResult {
   if (sortedSessions.length === 0) {
     return { positions: [], totalHeight: 0, showDockDivider: false, dockDividerY: null };
@@ -229,24 +232,27 @@ export function computeLayout(
   }));
 
   // First card (highest attention) gets hero treatment — full width, taller
-  const hero = categorized.shift();
-  if (!hero) {
-    return { positions: [], totalHeight: 0, showDockDivider: false, dockDividerY: null };
+  let masonryTop = 0;
+  if (leadWithHero) {
+    const hero = categorized.shift();
+    if (!hero) {
+      return { positions: [], totalHeight: 0, showDockDivider: false, dockDividerY: null };
+    }
+    positions.push({
+      id: hero.session.id,
+      x: 0,
+      y: 0,
+      w: containerWidth,
+      h: HERO_HEIGHT,
+      size: hero.size,
+      isHero: true,
+    });
+    masonryTop = HERO_HEIGHT + CARD_GAP;
   }
-
-  positions.push({
-    id: hero.session.id,
-    x: 0,
-    y: 0,
-    w: containerWidth,
-    h: HERO_HEIGHT,
-    size: hero.size,
-    isHero: true,
-  });
 
   // Rest: 2-column masonry, placed in shortest column
   const colW = (containerWidth - CARD_GAP) / 2;
-  const colHeights: [number, number] = [HERO_HEIGHT + CARD_GAP, HERO_HEIGHT + CARD_GAP];
+  const colHeights: [number, number] = [masonryTop, masonryTop];
 
   categorized.forEach(({ session, size }, i) => {
     const cardH = SIZE_HEIGHTS[size];

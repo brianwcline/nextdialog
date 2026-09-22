@@ -16,6 +16,8 @@ interface SmartGridProps {
   onOpenSession: (id: string) => void;
   onSessionContextMenu: (id: string, e: React.MouseEvent) => void;
   sessionTypeMap: Record<string, SessionType>;
+  /** False in grouped sections: plain masonry instead of a lead hero card. */
+  leadWithHero?: boolean;
 }
 
 /**
@@ -29,7 +31,9 @@ interface SmartGridProps {
  *   - Handles click (focus) vs double-click (open terminal) with a 250ms
  *     pending-click ref that's per-card so fast clicks across cards don't
  *     false-positive as double-clicks
- *   - Listens for Escape to unfocus
+ *
+ * The parent (HomeView) owns the scroll container and the Escape-to-unfocus
+ * listener, so several grids can stack on one page (one per session group).
  *
  * Phase 1 hardcodes hybrid mode. Phase 2 (deferred) would read the mode
  * from settings.
@@ -40,6 +44,7 @@ export function SmartGrid({
   onOpenSession,
   onSessionContextMenu,
   sessionTypeMap,
+  leadWithHero = true,
 }: SmartGridProps) {
   const { focusedSessionId, setFocusedSessionId } = useSessionContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +59,7 @@ export function SmartGrid({
     focusedSessionId,
     containerWidth,
     "hybrid",
+    leadWithHero,
   );
 
   // Measure container width — re-measure on resize.
@@ -134,20 +140,6 @@ export function SmartGrid({
     [onOpenSession, setFocusedSessionId],
   );
 
-  // Escape unfocuses. If the terminal is open, the existing TerminalOverlay
-  // escape handler fires first (it stops propagation), so this only triggers
-  // on the overview.
-  useEffect(() => {
-    if (isTerminalOpen) return; // terminal owns Escape when open
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && focusedSessionId !== null) {
-        setFocusedSessionId(null);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isTerminalOpen, focusedSessionId, setFocusedSessionId]);
-
   const sessionMap = Object.fromEntries(sessions.map((s) => [s.id, s]));
 
   // `grid-container` + `hybrid-mode` are theme hooks so CSS can target
@@ -161,59 +153,57 @@ export function SmartGrid({
     .join(" ");
 
   return (
-    <div className="flex-1 overflow-y-auto flex items-start justify-center p-8 pb-20">
-      <motion.div
-        ref={containerRef}
-        initial={{ opacity: 0, y: -20 }}
-        animate={{
-          opacity: isTerminalOpen ? 0 : 1,
-          y: isTerminalOpen ? -20 : 0,
-        }}
-        transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-        className={gridClasses}
-        style={{ height: layout.totalHeight || undefined }}
-      >
-        {layout.showDockDivider && layout.dockDividerY !== null && (
-          <div
-            className="dock-divider absolute left-0 right-0 pointer-events-none"
-            style={{
-              top: layout.dockDividerY,
-              transform: "translateY(-50%)",
-            }}
-          >
-            <span>other sessions</span>
-          </div>
-        )}
+    <motion.div
+      ref={containerRef}
+      initial={{ opacity: 0, y: -20 }}
+      animate={{
+        opacity: isTerminalOpen ? 0 : 1,
+        y: isTerminalOpen ? -20 : 0,
+      }}
+      transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
+      className={gridClasses}
+      style={{ height: layout.totalHeight || undefined }}
+    >
+      {layout.showDockDivider && layout.dockDividerY !== null && (
+        <div
+          className="dock-divider absolute left-0 right-0 pointer-events-none"
+          style={{
+            top: layout.dockDividerY,
+            transform: "translateY(-50%)",
+          }}
+        >
+          <span>other sessions</span>
+        </div>
+      )}
 
-        {layout.positions.map((pos, idx) => {
-          const session = sessionMap[pos.id];
-          if (!session) return null;
-          return (
-            <motion.div
-              key={pos.id}
-              initial={false}
-              animate={{
-                x: pos.x,
-                y: pos.y,
-                width: pos.w,
-                height: pos.h,
-              }}
-              transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-              className="absolute top-0 left-0"
-            >
-              <SessionCard
-                session={session}
-                index={idx}
-                size={pos.size}
-                isFocused={focusedSessionId === pos.id}
-                sessionType={sessionTypeMap[session.session_type]}
-                onClick={() => handleCardClick(pos.id)}
-                onContextMenu={(e) => onSessionContextMenu(pos.id, e)}
-              />
-            </motion.div>
-          );
-        })}
-      </motion.div>
-    </div>
+      {layout.positions.map((pos, idx) => {
+        const session = sessionMap[pos.id];
+        if (!session) return null;
+        return (
+          <motion.div
+            key={pos.id}
+            initial={false}
+            animate={{
+              x: pos.x,
+              y: pos.y,
+              width: pos.w,
+              height: pos.h,
+            }}
+            transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
+            className="absolute top-0 left-0"
+          >
+            <SessionCard
+              session={session}
+              index={idx}
+              size={pos.size}
+              isFocused={focusedSessionId === pos.id}
+              sessionType={sessionTypeMap[session.session_type]}
+              onClick={() => handleCardClick(pos.id)}
+              onContextMenu={(e) => onSessionContextMenu(pos.id, e)}
+            />
+          </motion.div>
+        );
+      })}
+    </motion.div>
   );
 }

@@ -1,7 +1,11 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import type { Session, SessionType } from "../lib/types";
 import { SmartGrid } from "./SmartGrid";
+import { SessionGroupSections } from "./SessionGroupSections";
+import { useSessionContext } from "../context/SessionContext";
+import { hasAnyGroup } from "../lib/sessionSections";
 import { MoodControls } from "./MoodControls";
 import { useUpdateCheck } from "../hooks/useUpdateCheck";
 
@@ -44,6 +48,21 @@ export function HomeView({
 }: HomeViewProps) {
   const { update } = useUpdateCheck();
   const isTerminalOpen = activeSessionId !== null;
+  const { focusedSessionId, setFocusedSessionId } = useSessionContext();
+
+  // Escape unfocuses. Registered here once rather than per grid, since the
+  // grouped view stacks several. When the terminal is open, TerminalOverlay
+  // owns Escape (it stops propagation).
+  useEffect(() => {
+    if (isTerminalOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && focusedSessionId !== null) {
+        setFocusedSessionId(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isTerminalOpen, focusedSessionId, setFocusedSessionId]);
 
   return (
     <div className="flex flex-col h-full">
@@ -90,13 +109,27 @@ export function HomeView({
       {sessions.length === 0 ? (
         <EmptyState onNewSession={onNewSession} />
       ) : (
-        <SmartGrid
-          sessions={sessions}
-          isTerminalOpen={isTerminalOpen}
-          onOpenSession={onSelectSession}
-          onSessionContextMenu={onSessionContextMenu}
-          sessionTypeMap={sessionTypeMap}
-        />
+        <div className="flex-1 overflow-y-auto flex items-start justify-center p-8 pb-20">
+          {hasAnyGroup(sessions) ? (
+            <div className="w-full max-w-4xl">
+              <SessionGroupSections
+                sessions={sessions}
+                isTerminalOpen={isTerminalOpen}
+                onOpenSession={onSelectSession}
+                onSessionContextMenu={onSessionContextMenu}
+                sessionTypeMap={sessionTypeMap}
+              />
+            </div>
+          ) : (
+            <SmartGrid
+              sessions={sessions}
+              isTerminalOpen={isTerminalOpen}
+              onOpenSession={onSelectSession}
+              onSessionContextMenu={onSessionContextMenu}
+              sessionTypeMap={sessionTypeMap}
+            />
+          )}
+        </div>
       )}
 
       {/* Floating action button */}

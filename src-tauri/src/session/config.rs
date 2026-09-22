@@ -30,6 +30,10 @@ pub struct SessionConfig {
     /// context, not a frozen title.
     #[serde(default)]
     pub current_prompt: Option<String>,
+    /// User-assigned home-view group ("Clients", "Personal"). `None` means
+    /// ungrouped. A group exists only while some session uses it (#12, #17).
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 fn default_session_type() -> String {

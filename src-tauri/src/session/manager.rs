@@ -8,6 +8,9 @@ use uuid::Uuid;
 use super::config::{CreateSessionRequest, SessionConfig};
 use super::tuning::SessionTuning;
 
+/// Longest group name we store; longer input is cut on a char boundary.
+const MAX_GROUP_NAME_CHARS: usize = 40;
+
 pub struct SessionManager {
     sessions: Mutex<Vec<SessionConfig>>,
     storage_path: PathBuf,
@@ -21,8 +24,10 @@ impl SessionManager {
 
         fs::create_dir_all(&config_dir).expect("Could not create config directory");
 
-        let storage_path = config_dir.join("sessions.json");
+        Self::load(config_dir.join("sessions.json"))
+    }
 
+    fn load(storage_path: PathBuf) -> Self {
         let mut sessions: Vec<SessionConfig> = if storage_path.exists() {
             let data = fs::read_to_string(&storage_path).unwrap_or_default();
             serde_json::from_str(&data).unwrap_or_default()
@@ -76,6 +81,7 @@ impl SessionManager {
             parent_id: req.parent_id,
             tuning: None,
             current_prompt: None,
+            group: None,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -128,6 +134,23 @@ impl SessionManager {
         self.persist(&sessions);
     }
 
+    /// Put a session in a named group, or take it out with `None`. Names are
+    /// trimmed; blank means ungrouped.
+    pub fn set_group(&self, id: &str, group: Option<&str>) -> Result<Option<String>, String> {
+        let normalized = group
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(|name| name.chars().take(MAX_GROUP_NAME_CHARS).collect::<String>());
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| format!("Session not found: {id}"))?;
+        session.group = normalized.clone();
+        self.persist(&sessions);
+        Ok(normalized)
+    }
+
     pub fn update_tuning(
         &self,
         id: &str,
@@ -170,5 +193,88 @@ impl SessionManager {
             .iter()
             .find(|s| s.id == id)
             .and_then(|s| s.tuning.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manager_in(dir: &std::path::Path) -> SessionManager {
+        SessionManager::load(dir.join("sessions.json"))
+    }
+
+    fn create_session(manager: &SessionManager, dir: &std::path::Path) -> String {
+        manager
+            .create(CreateSessionRequest {
+                name: "demo".to_string(),
+                working_directory: dir.to_string_lossy().into_owned(),
+                skip_permissions: false,
+                initial_prompt: None,
+                session_type: "claude-code".to_string(),
+                parent_id: None,
+            })
+            .unwrap()
+            .id
+    }
+
+    #[test]
+    fn set_group_trims_and_persists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_in(tmp.path());
+        let id = create_session(&manager, tmp.path());
+
+        assert_eq!(manager.set_group(&id, Some("  Clients ")).unwrap().as_deref(), Some("Clients"));
+
+        let reloaded = manager_in(tmp.path());
+        assert_eq!(reloaded.get(&id).unwrap().group.as_deref(), Some("Clients"));
+    }
+
+    #[test]
+    fn blank_or_none_clears_group() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_in(tmp.path());
+        let id = create_session(&manager, tmp.path());
+
+        manager.set_group(&id, Some("Clients")).unwrap();
+        assert_eq!(manager.set_group(&id, Some("   ")).unwrap(), None);
+        manager.set_group(&id, Some("Clients")).unwrap();
+        assert_eq!(manager.set_group(&id, None).unwrap(), None);
+        assert_eq!(manager.get(&id).unwrap().group, None);
+    }
+
+    #[test]
+    fn long_group_names_are_capped_on_char_boundaries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_in(tmp.path());
+        let id = create_session(&manager, tmp.path());
+
+        let stored = manager.set_group(&id, Some(&"é".repeat(60))).unwrap().unwrap();
+        assert_eq!(stored.chars().count(), MAX_GROUP_NAME_CHARS);
+    }
+
+    #[test]
+    fn unknown_session_is_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_in(tmp.path());
+        assert!(manager.set_group("missing", Some("Clients")).is_err());
+    }
+
+    #[test]
+    fn sessions_file_without_group_field_still_loads() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = serde_json::json!([{
+            "id": "s1",
+            "name": "old",
+            "working_directory": "/tmp",
+            "skip_permissions": false,
+            "created_at": "2026-01-01T00:00:00Z",
+            "last_active": "2026-01-01T00:00:00Z"
+        }]);
+        fs::write(tmp.path().join("sessions.json"), legacy.to_string()).unwrap();
+
+        let manager = manager_in(tmp.path());
+        let session = manager.get("s1").unwrap();
+        assert_eq!(session.group, None);
     }
 }

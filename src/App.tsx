@@ -11,6 +11,9 @@ import { SettingsView } from "./components/SettingsView";
 
 import { SessionDock } from "./components/SessionDock";
 import { FeedbackModal } from "./components/FeedbackModal";
+import { GroupPickerModal } from "./components/GroupPickerModal";
+import { useSessionContext } from "./context/SessionContext";
+import { listGroupNames } from "./lib/sessionSections";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
 import { useHookEvents } from "./hooks/useHookEvents";
@@ -62,6 +65,7 @@ class ErrorBoundary extends Component<
 
 function AppContent() {
   const { sessions, createSession, removeSession, loadSessions } = useSession();
+  const { dispatch } = useSessionContext();
   const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions]);
   useStatus(sessionIds);
   useHookEvents(sessionIds);
@@ -244,6 +248,41 @@ function AppContent() {
     [activeSessionId, removeSession, sessions, companionMap],
   );
 
+  const groupNames = useMemo(() => listGroupNames(sessions), [sessions]);
+  const [groupPickerSessionId, setGroupPickerSessionId] = useState<string | null>(null);
+  const groupPickerSession = useMemo(
+    () => sessions.find((s) => s.id === groupPickerSessionId) ?? null,
+    [sessions, groupPickerSessionId],
+  );
+
+  const handleSetSessionGroup = useCallback(
+    async (id: string, group: string | null) => {
+      try {
+        const stored = await invoke<string | null>("set_session_group", { id, group });
+        dispatch({ type: "UPDATE_SESSION", id, updates: { group: stored ?? undefined } });
+        if (stored === null) {
+          trackEvent("session_group.removed", "session-groups", undefined, id);
+        } else {
+          // Group names are never sent: they can be client names.
+          const isNewGroup = !groupNames.includes(stored);
+          trackEvent(
+            "session_group.assigned",
+            "session-groups",
+            {
+              is_new_group: isNewGroup,
+              group_count: groupNames.length + (isNewGroup ? 1 : 0),
+            },
+            id,
+          );
+        }
+        setGroupPickerSessionId(null);
+      } catch (err) {
+        console.error("Failed to set session group:", err);
+      }
+    },
+    [dispatch, groupNames],
+  );
+
   const handleParkSession = useCallback(
     async (id: string) => {
       try {
@@ -332,10 +371,19 @@ function AppContent() {
     } catch {
       /* ignore */
     }
-    trackEvent("app.launched", "app-lifecycle", {
-      session_count: sessions.length,
-      mood_theme: moodTheme,
-    });
+    // Read sessions directly: the context is still empty when this mount
+    // effect runs, which made session_count always 0.
+    invoke<Session[]>("list_sessions")
+      .then((loaded) => {
+        trackEvent("app.launched", "app-lifecycle", {
+          session_count: loaded.length,
+          group_count: listGroupNames(loaded).length,
+          mood_theme: moodTheme,
+        });
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to load sessions for launch telemetry:", err);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -378,7 +426,6 @@ function AppContent() {
             ? "Unpark"
             : "Park",
           shortcut: "⌘P",
-          dividerAfter: true,
           onClick: () => {
             const s = sessions.find((s) => s.id === contextMenu.id);
             if (s?.parked) {
@@ -387,6 +434,11 @@ function AppContent() {
               handleParkSession(contextMenu.id);
             }
           },
+        },
+        {
+          label: "Move to group…",
+          dividerAfter: true,
+          onClick: () => setGroupPickerSessionId(contextMenu.id),
         },
         {
           label: "End Session",
@@ -482,6 +534,7 @@ function AppContent() {
             onRestart={handleRestartSession}
             onRemove={handleRemoveSession}
             onPark={handleParkSession}
+            onMoveToGroup={setGroupPickerSessionId}
             onAddCompanion={handleAddCompanion}
             onRemoveCompanion={handleRemoveCompanion}
           />
@@ -499,6 +552,15 @@ function AppContent() {
         y={contextMenu?.y ?? 0}
         items={contextMenuItems}
         onClose={() => setContextMenu(null)}
+      />
+
+      <GroupPickerModal
+        session={groupPickerSession}
+        existingGroups={groupNames}
+        onPick={(group) => {
+          if (groupPickerSessionId) void handleSetSessionGroup(groupPickerSessionId, group);
+        }}
+        onClose={() => setGroupPickerSessionId(null)}
       />
     </>
   );

@@ -24,6 +24,7 @@ export function useSmartLayout(
   focusedSessionId: string | null,
   containerWidth: number,
   layout: LayoutMode = "hybrid",
+  leadWithHero = true,
 ): LayoutResult {
   // Build the AttentionSession array once per render.
   const attentionSessions = useMemo<AttentionSession[]>(
@@ -50,6 +51,6 @@ export function useSmartLayout(
       };
     }
     const sorted = sortSessions(attentionSessions, layout, focusedSession);
-    return computeLayout(sorted, layout, focusedSession, containerWidth);
-  }, [attentionSessions, layout, focusedSession, containerWidth]);
+    return computeLayout(sorted, layout, focusedSession, containerWidth, leadWithHero);
+  }, [attentionSessions, layout, focusedSession, containerWidth, leadWithHero]);
 }
