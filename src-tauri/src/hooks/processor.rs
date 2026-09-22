@@ -75,7 +75,10 @@ pub fn process(session_id: &str, payload: HookPayload, app_handle: &AppHandle) {
             if let Some(pool) = app_handle.try_state::<crate::pty::pool::PtyPool>() {
                 pool.flush_command_queue(session_id);
             }
-            Some(TimelineEntry::new("lifecycle", "Session started"))
+            // The spawn command records "Session started" itself: Claude Code
+            // skips HTTP hooks for SessionStart, so relying on this arm left
+            // fresh sessions with an empty timeline (#16).
+            None
         }
         HookEvent::SessionEnd => {
             let _ = app_handle.emit(
@@ -381,7 +384,7 @@ fn prompt_preview(prompt: &str) -> String {
         }
     }
     let cut = if last_space > 0 { last_space } else { end };
-    format!("{}…", &first_line[..cut].trim_end())
+    format!("{}…", first_line[..cut].trim_end())
 }
 
 /// Truncate a string to max length, appending "…" if truncated.

@@ -7,6 +7,13 @@ import { SessionTypeIcon } from "./SessionTypeIcon";
 import { ConfigureModal } from "./ConfigureModal";
 import type { SessionType } from "../lib/types";
 import { defaultAgentConfig } from "../lib/types";
+import {
+  TERMINAL_FONT_SIZE_DEFAULT,
+  TERMINAL_FONT_SIZE_MAX,
+  TERMINAL_FONT_SIZE_MIN,
+  setTerminalFontSize,
+  useTerminalFontSize,
+} from "../lib/terminalFontSize";
 
 interface Settings {
   default_directory: string;
@@ -22,6 +29,7 @@ interface Settings {
   hook_port_end: number;
   background_mode: string;
   background_image_path: string;
+  terminal_font_size: number;
 }
 
 interface SettingsViewProps {
@@ -59,7 +67,19 @@ export function SettingsView({
     hook_port_end: 7499,
     background_mode: "gradient",
     background_image_path: "",
+    terminal_font_size: TERMINAL_FONT_SIZE_DEFAULT,
   });
+  const terminalFontSize = useTerminalFontSize();
+
+  // Font size is persisted by its own command, not `save`. Keep the local
+  // copy in step so a later `save({...})` doesn't write back a stale size.
+  useEffect(() => {
+    setSettings((prev) =>
+      prev.terminal_font_size === terminalFontSize
+        ? prev
+        : { ...prev, terminal_font_size: terminalFontSize },
+    );
+  }, [terminalFontSize]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [configureType, setConfigureType] = useState<SessionType | null>(null);
@@ -245,6 +265,61 @@ export function SettingsView({
                         className="px-3 py-1.5 rounded-lg text-slate-400 text-xs hover:text-slate-600 transition-colors"
                       >
                         Reset to Default
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Terminal font size */}
+              <div className="border-t border-slate-200 pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700">
+                      Terminal Font Size
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Applies to every terminal. ⌘= / ⌘- / ⌘0 in a terminal.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label="Decrease terminal font size"
+                      disabled={terminalFontSize <= TERMINAL_FONT_SIZE_MIN}
+                      onClick={() =>
+                        setTerminalFontSize(terminalFontSize - 1, "settings")
+                      }
+                      className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:hover:bg-slate-100"
+                    >
+                      −
+                    </button>
+                    <span
+                      className="w-10 text-center text-sm font-mono text-slate-700 tabular-nums"
+                      aria-live="polite"
+                    >
+                      {terminalFontSize}px
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Increase terminal font size"
+                      disabled={terminalFontSize >= TERMINAL_FONT_SIZE_MAX}
+                      onClick={() =>
+                        setTerminalFontSize(terminalFontSize + 1, "settings")
+                      }
+                      className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 transition-colors disabled:opacity-40 disabled:hover:bg-slate-100"
+                    >
+                      +
+                    </button>
+                    {terminalFontSize !== TERMINAL_FONT_SIZE_DEFAULT && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTerminalFontSize(TERMINAL_FONT_SIZE_DEFAULT, "reset")
+                        }
+                        className="ml-1 px-2 py-1 rounded-lg text-slate-400 text-xs hover:text-slate-600 transition-colors"
+                      >
+                        Reset
                       </button>
                     )}
                   </div>
