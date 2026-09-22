@@ -29,6 +29,7 @@ pub fn inject_hook_config(working_dir: &str, port: u16) -> Result<(), String> {
         "SessionStart",
         "SessionEnd",
         "UserPromptSubmit",
+        "PostCompact",
     ];
 
     // Get or create the "hooks" object
