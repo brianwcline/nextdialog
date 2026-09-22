@@ -15,18 +15,20 @@ import {
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
 
-// Per-viewer UI preference, not a Setting: whether the terminal window fills
-// the app window or floats centered at a capped size (the pre-#21 layout).
+// Per-viewer UI preference, not a Setting: whether the terminal window floats
+// centered at a capped size or fills the app window. Centered is the default
+// so a maximized window keeps room beside the terminal for future panels;
+// fill is opt-in via ⌘⇧F or double-clicking the header (#21).
 const LAYOUT_STORAGE_KEY = "nd-terminal-layout";
 type TerminalLayout = "fill" | "centered";
 
 function readTerminalLayout(): TerminalLayout {
   try {
-    return localStorage.getItem(LAYOUT_STORAGE_KEY) === "centered"
-      ? "centered"
-      : "fill";
+    return localStorage.getItem(LAYOUT_STORAGE_KEY) === "fill"
+      ? "fill"
+      : "centered";
   } catch {
-    return "fill";
+    return "centered";
   }
 }
 
