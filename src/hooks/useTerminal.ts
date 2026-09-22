@@ -6,6 +6,10 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { terminalOptions } from "../lib/terminal-theme";
+import {
+  getTerminalFontSize,
+  subscribeTerminalFontSize,
+} from "../lib/terminalFontSize";
 
 // Scroll/resize tracing, off by default. Enable from devtools with
 // localStorage.setItem("nd-term-debug", "1") and reload.
@@ -130,12 +134,19 @@ export function useTerminal({
 
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
+  // Read by the font-size subscriber, which lives outside the render cycle.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
   // Create terminal once
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    const term = new Terminal(terminalOptions);
+    const term = new Terminal({
+      ...terminalOptions,
+      fontSize: getTerminalFontSize(),
+    });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
@@ -511,6 +522,40 @@ export function useTerminal({
       window.removeEventListener("resize", handleWindowResize);
     };
   }, [sessionId, visible, containerRef]);
+
+  // Live font-size changes (Cmd+= / Settings). Hidden panes only take the
+  // new size; the mount effect re-fits them when they become visible.
+  useEffect(() => {
+    return subscribeTerminalFontSize(() => {
+      const term = termRef.current;
+      const fitAddon = fitAddonRef.current;
+      const size = getTerminalFontSize();
+      if (!term || term.options.fontSize === size) return;
+
+      const wasAtBottom = isAtBottomRef.current;
+      term.options.fontSize = size;
+      if (!visibleRef.current || !term.element || !fitAddon) return;
+
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        invoke("resize_pty", {
+          id: sessionId,
+          rows: term.rows,
+          cols: term.cols,
+        }).catch(() => {});
+        if (wasAtBottom) {
+          // Same reasoning as resize: the agent's TUI redraws after
+          // SIGWINCH and must not flip us out of follow mode.
+          forceAutoScrollUntil.current = Date.now() + RESIZE_GRACE_MS;
+          isAtBottomRef.current = true;
+          requestAnimationFrame(() => {
+            syncViewportScrollArea(term, "font-size");
+            term.scrollToBottom();
+          });
+        }
+      });
+    });
+  }, [sessionId]);
 
   const focus = useCallback(() => {
     termRef.current?.focus();

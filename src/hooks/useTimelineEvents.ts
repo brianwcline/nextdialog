@@ -126,7 +126,8 @@ export function useTimelineEvents(sessionId: string, isOpen: boolean) {
         setHasMore(entries.length >= PAGE_SIZE);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        console.error("[timeline] Failed to load entries", error);
         setLoading(false);
       });
   }, [sessionId, isOpen]);
@@ -152,7 +153,8 @@ export function useTimelineEvents(sessionId: string, isOpen: boolean) {
         }
         setLoadingMore(false);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        console.error("[timeline] Failed to load older entries", error);
         setLoadingMore(false);
       });
   }, [sessionId, loadingMore, hasMore]);

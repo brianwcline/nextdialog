@@ -16,6 +16,10 @@ import { useStatus } from "./hooks/useStatus";
 import { useHookEvents } from "./hooks/useHookEvents";
 import { useSessionTypes } from "./hooks/useSessionTypes";
 import { trackEvent } from "./lib/telemetry";
+import {
+  getTerminalFontSize,
+  loadTerminalFontSize,
+} from "./lib/terminalFontSize";
 import { MOOD_STORAGE_KEY, isMoodTheme } from "./themes";
 import {
   getRecentSessions,
@@ -335,7 +339,10 @@ function AppContent() {
     trackEvent("app.launched", "app-lifecycle", {
       session_count: sessions.length,
       mood_theme: moodTheme,
+      // Boot cache value; Settings reconciliation happens just below.
+      terminal_font_size: getTerminalFontSize(),
     });
+    loadTerminalFontSize();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
