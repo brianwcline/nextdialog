@@ -8,8 +8,29 @@ import { SessionTimeline } from "./SessionTimeline";
 import { TuningPanel } from "./TuningPanel";
 import { StatusDot } from "./StatusDot";
 import { trackEvent } from "../lib/telemetry";
+import {
+  resetTerminalFontSize,
+  stepTerminalFontSize,
+} from "../lib/terminalFontSize";
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
+
+// Per-viewer UI preference, not a Setting: whether the terminal window floats
+// centered at a capped size or fills the app window. Centered is the default
+// so a maximized window keeps room beside the terminal for future panels;
+// fill is opt-in via ⌘⇧F or double-clicking the header (#21).
+const LAYOUT_STORAGE_KEY = "nd-terminal-layout";
+type TerminalLayout = "fill" | "centered";
+
+function readTerminalLayout(): TerminalLayout {
+  try {
+    return localStorage.getItem(LAYOUT_STORAGE_KEY) === "fill"
+      ? "fill"
+      : "centered";
+  } catch {
+    return "centered";
+  }
+}
 
 interface TerminalOverlayProps {
   session: Session;
@@ -43,6 +64,20 @@ export function TerminalOverlay({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [tuningOpen, setTuningOpen] = useState(false);
   const paneRefs = useRef<Map<string, TerminalPaneHandle>>(new Map());
+  const [layout, setLayout] = useState<TerminalLayout>(readTerminalLayout);
+
+  const toggleLayout = useCallback(() => {
+    setLayout((current) => {
+      const next: TerminalLayout = current === "fill" ? "centered" : "fill";
+      try {
+        localStorage.setItem(LAYOUT_STORAGE_KEY, next);
+      } catch {
+        // Preference just won't survive a relaunch.
+      }
+      trackEvent("terminal.layout_toggled", "terminal-display", { layout: next });
+      return next;
+    });
+  }, []);
 
   const allTabs = [session, ...companions];
   const activeSession = allTabs.find((t) => t.id === activeTabId) ?? session;
@@ -165,6 +200,30 @@ export function TerminalOverlay({
         return;
       }
 
+      // ⌘= / ⌘+ / ⌘- / ⌘0 → terminal font size (global, all panes)
+      if (e.metaKey && !e.altKey && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        stepTerminalFontSize(1);
+        return;
+      }
+      if (e.metaKey && !e.altKey && e.key === "-") {
+        e.preventDefault();
+        stepTerminalFontSize(-1);
+        return;
+      }
+      if (e.metaKey && !e.altKey && e.key === "0") {
+        e.preventDefault();
+        resetTerminalFontSize();
+        return;
+      }
+
+      // ⌘⇧F → toggle fill-window vs centered terminal layout
+      if (e.metaKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+        e.preventDefault();
+        toggleLayout();
+        return;
+      }
+
       if (e.metaKey && e.key === "ArrowDown") {
         e.preventDefault();
         paneRefs.current.get(activeTabId)?.scrollToBottom();
@@ -183,7 +242,7 @@ export function TerminalOverlay({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose, onRestart, onPark, onEnd, showMenu, timelineOpen, tuningOpen, session, companions, activeTabId, onAddCompanion, onRemoveCompanion]);
+  }, [isOpen, onClose, onRestart, onPark, onEnd, showMenu, timelineOpen, tuningOpen, session, companions, activeTabId, onAddCompanion, onRemoveCompanion, toggleLayout]);
 
   // Drag-drop file handling — writes to active tab
   useEffect(() => {
@@ -228,7 +287,7 @@ export function TerminalOverlay({
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center p-8"
+      className={`fixed inset-0 z-50 flex items-center justify-center ${layout === "fill" ? "px-6 pb-6 pt-10" : "p-8"}`}
       initial={false}
       animate={{
         opacity: isOpen ? 1 : 0,
@@ -245,9 +304,16 @@ export function TerminalOverlay({
         transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       />
 
+      {/* The overlay covers the home header's drag region, so give fill mode
+          its own. pt-10 keeps the window clear of the macOS traffic lights,
+          which draw inside the content area (titleBarStyle: Overlay). */}
+      {layout === "fill" && (
+        <div data-tauri-drag-region className="absolute inset-x-0 top-0 h-10 z-10" />
+      )}
+
       {/* Terminal window */}
       <motion.div
-        className="relative w-full h-full max-w-5xl max-h-[85vh] rounded-[2rem] overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col bg-[#1E1E2E]"
+        className={`relative w-full h-full ${layout === "fill" ? "rounded-2xl" : "max-w-5xl max-h-[85vh] rounded-[2rem]"} overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col bg-[#1E1E2E]`}
         initial={false}
         animate={{
           scale: isOpen ? 1 : 0.98,
@@ -257,7 +323,16 @@ export function TerminalOverlay({
         transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2.5 bg-[#181825] border-b border-slate-700/50 relative z-20" onMouseDown={(e) => e.preventDefault()}>
+        <div className="flex items-center justify-between px-3 py-2.5 bg-[#181825] border-b border-slate-700/50 relative z-20"
+          onMouseDown={(e) => e.preventDefault()}
+          onDoubleClick={(e) => {
+            // Only bare header space toggles; double-clicking a control
+            // (back, menu) should do what that control does.
+            if ((e.target as HTMLElement).closest("button, a, input")) return;
+            toggleLayout();
+          }}
+          title="Double-click to toggle full-window terminal (⌘⇧F)"
+        >
           <div className="flex items-center gap-3">
             {/* Back arrow — return to home */}
             <button
@@ -466,6 +541,7 @@ export function TerminalOverlay({
                 <TuningPanel
                   sessionId={activeSession.id}
                   sessionType={activeSession.session_type}
+                  skipPermissions={activeSession.skip_permissions}
                   onDismiss={() => setTuningOpen(false)}
                   onRestart={() => {
                     setTuningOpen(false);

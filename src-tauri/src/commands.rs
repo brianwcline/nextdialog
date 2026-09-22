@@ -322,6 +322,15 @@ pub fn save_settings(manager: State<'_, SettingsManager>, settings: Settings) {
     manager.save(settings);
 }
 
+/// Persist only the terminal font size. Returns the clamped value actually
+/// stored so the frontend can reconcile if it sent something out of range.
+#[tauri::command]
+pub fn set_terminal_font_size(manager: State<'_, SettingsManager>, size: u16) -> u16 {
+    let clamped = crate::settings::clamp_terminal_font_size(size);
+    manager.update(|settings| settings.terminal_font_size = clamped);
+    clamped
+}
+
 // ── Session Parking ──
 
 #[tauri::command]
