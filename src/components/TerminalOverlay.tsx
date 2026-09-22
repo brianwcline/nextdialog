@@ -285,7 +285,7 @@ export function TerminalOverlay({
 
   return (
     <motion.div
-      className={`fixed inset-0 z-50 flex items-center justify-center ${layout === "fill" ? "p-4" : "p-8"}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center ${layout === "fill" ? "px-6 pb-6 pt-10" : "p-8"}`}
       initial={false}
       animate={{
         opacity: isOpen ? 1 : 0,
@@ -301,6 +301,13 @@ export function TerminalOverlay({
         animate={{ backdropFilter: isOpen ? "blur(8px)" : "blur(0px)" }}
         transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
       />
+
+      {/* The overlay covers the home header's drag region, so give fill mode
+          its own. pt-10 keeps the window clear of the macOS traffic lights,
+          which draw inside the content area (titleBarStyle: Overlay). */}
+      {layout === "fill" && (
+        <div data-tauri-drag-region className="absolute inset-x-0 top-0 h-10 z-10" />
+      )}
 
       {/* Terminal window */}
       <motion.div
