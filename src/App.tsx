@@ -11,6 +11,9 @@ import { SettingsView } from "./components/SettingsView";
 
 import { SessionDock } from "./components/SessionDock";
 import { FeedbackModal } from "./components/FeedbackModal";
+import { GroupPickerModal } from "./components/GroupPickerModal";
+import { useSessionGroups } from "./hooks/useSessionGroups";
+import { listGroupNames } from "./lib/stacks";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
 import { useHookEvents } from "./hooks/useHookEvents";
@@ -66,6 +69,7 @@ class ErrorBoundary extends Component<
 
 function AppContent() {
   const { sessions, createSession, removeSession, loadSessions } = useSession();
+  const { groupNames, setSessionGroup } = useSessionGroups();
   const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions]);
   useStatus(sessionIds);
   useHookEvents(sessionIds);
@@ -248,6 +252,12 @@ function AppContent() {
     [activeSessionId, removeSession, sessions, companionMap],
   );
 
+  const [groupPickerSessionId, setGroupPickerSessionId] = useState<string | null>(null);
+  const groupPickerSession = useMemo(
+    () => sessions.find((s) => s.id === groupPickerSessionId) ?? null,
+    [sessions, groupPickerSessionId],
+  );
+
   const handleParkSession = useCallback(
     async (id: string) => {
       try {
@@ -336,12 +346,22 @@ function AppContent() {
     } catch {
       /* ignore */
     }
-    trackEvent("app.launched", "app-lifecycle", {
-      session_count: sessions.length,
-      mood_theme: moodTheme,
-      // Boot cache value; Settings reconciliation happens just below.
-      terminal_font_size: getTerminalFontSize(),
-    });
+    // Boot cache value, captured before the Settings reconciliation below.
+    const bootTerminalFontSize = getTerminalFontSize();
+    // Read sessions directly: the context is still empty when this mount
+    // effect runs, which made session_count always 0.
+    invoke<Session[]>("list_sessions")
+      .then((loaded) => {
+        trackEvent("app.launched", "app-lifecycle", {
+          session_count: loaded.length,
+          group_count: listGroupNames(loaded).length,
+          mood_theme: moodTheme,
+          terminal_font_size: bootTerminalFontSize,
+        });
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to load sessions for launch telemetry:", err);
+      });
     loadTerminalFontSize();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -385,7 +405,6 @@ function AppContent() {
             ? "Unpark"
             : "Park",
           shortcut: "⌘P",
-          dividerAfter: true,
           onClick: () => {
             const s = sessions.find((s) => s.id === contextMenu.id);
             if (s?.parked) {
@@ -394,6 +413,11 @@ function AppContent() {
               handleParkSession(contextMenu.id);
             }
           },
+        },
+        {
+          label: "Move to group…",
+          dividerAfter: true,
+          onClick: () => setGroupPickerSessionId(contextMenu.id),
         },
         {
           label: "End Session",
@@ -489,6 +513,7 @@ function AppContent() {
             onRestart={handleRestartSession}
             onRemove={handleRemoveSession}
             onPark={handleParkSession}
+            onMoveToGroup={setGroupPickerSessionId}
             onAddCompanion={handleAddCompanion}
             onRemoveCompanion={handleRemoveCompanion}
           />
@@ -506,6 +531,18 @@ function AppContent() {
         y={contextMenu?.y ?? 0}
         items={contextMenuItems}
         onClose={() => setContextMenu(null)}
+      />
+
+      <GroupPickerModal
+        session={groupPickerSession}
+        existingGroups={groupNames}
+        onPick={(group) => {
+          if (!groupPickerSessionId) return;
+          void setSessionGroup(groupPickerSessionId, group, "menu").then(() =>
+            setGroupPickerSessionId(null),
+          );
+        }}
+        onClose={() => setGroupPickerSessionId(null)}
       />
     </>
   );

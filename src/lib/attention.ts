@@ -30,6 +30,8 @@ export interface AttentionSession {
   interactionCount: number;
   /** Project slug derived from working directory; null when unknown. */
   project: string | null;
+  /** Synthetic entry standing in for a whole session stack (group). */
+  isStack?: boolean;
 }
 
 /** Absolute card position in the grid. */
@@ -102,7 +104,8 @@ export function getSizeCategory(
   const score = getAttentionScore(session);
   if (score > 0.7) return "large";
   if (score > 0.4) return "medium";
-  if (score > 0.15) return "small";
+  // A stack needs at least a small card so its fanned pile stays readable.
+  if (score > 0.15 || session.isStack) return "small";
   return "minimal";
 }
 

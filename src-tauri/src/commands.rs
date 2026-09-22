@@ -382,6 +382,26 @@ pub fn set_terminal_font_size(manager: State<'_, SettingsManager>, size: u16) ->
 
 // ── Session Parking ──
 
+/// Returns the stored (normalized) group name, `None` when ungrouped.
+#[tauri::command]
+pub fn set_session_group(
+    manager: State<'_, SessionManager>,
+    id: String,
+    group: Option<String>,
+) -> Result<Option<String>, String> {
+    manager.set_group(&id, group.as_deref())
+}
+
+/// Rename a group across all its sessions. Returns the stored name.
+#[tauri::command]
+pub fn rename_session_group(
+    manager: State<'_, SessionManager>,
+    from: String,
+    to: String,
+) -> Result<String, String> {
+    manager.rename_group(&from, &to).map(|(stored, _)| stored)
+}
+
 #[tauri::command]
 pub fn park_session(manager: State<'_, SessionManager>, id: String) {
     manager.set_parked(&id, true);

@@ -35,6 +35,8 @@ export interface Session {
   tuning?: SessionTuning;
   /** Latest user prompt captured from a UserPromptSubmit hook. Rendered as a subtitle on the focused hero card only. */
   current_prompt?: string;
+  /** User-assigned home-view group. Absent means ungrouped. */
+  group?: string;
   hookEnabled?: boolean;
   lastToolUse?: string;
   hookNotification?: string;

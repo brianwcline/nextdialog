@@ -1,7 +1,13 @@
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import type { Session, SessionType } from "../lib/types";
 import { SmartGrid } from "./SmartGrid";
+import { StackOverlay } from "./StackOverlay";
+import { useSessionContext } from "../context/SessionContext";
+import { useSessionGroups } from "../hooks/useSessionGroups";
+import { buildStacks, stackId } from "../lib/stacks";
+import { trackEvent } from "../lib/telemetry";
 import { MoodControls } from "./MoodControls";
 import { useUpdateCheck } from "../hooks/useUpdateCheck";
 
@@ -44,6 +50,84 @@ export function HomeView({
 }: HomeViewProps) {
   const { update } = useUpdateCheck();
   const isTerminalOpen = activeSessionId !== null;
+  const { focusedSessionId, setFocusedSessionId } = useSessionContext();
+
+  // Escape unfocuses. Registered here once rather than per grid, since the
+  // grouped view stacks several. When the terminal is open, TerminalOverlay
+  // owns Escape (it stops propagation).
+  useEffect(() => {
+    if (isTerminalOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && focusedSessionId !== null) {
+        setFocusedSessionId(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isTerminalOpen, focusedSessionId, setFocusedSessionId]);
+
+  // ── Stacks (iOS-folder style groups) ──
+  const { setSessionGroup, createStack, renameStack } = useSessionGroups();
+  const [openStack, setOpenStack] = useState<{
+    name: string;
+    originRect: DOMRect;
+    autoEditTitle: boolean;
+  } | null>(null);
+  // Stays set until the close animation finishes, so the tile doesn't
+  // reappear while the panel is still flying back into it.
+  const [hiddenStackName, setHiddenStackName] = useState<string | null>(null);
+
+  // Members only; ordering here doesn't need timeline counts.
+  const stacksByName = useMemo(
+    () => Object.fromEntries(buildStacks(sessions, {}).stacks.map((st) => [st.name, st])),
+    [sessions],
+  );
+  const openStackInfo = openStack ? stacksByName[openStack.name] : undefined;
+
+  // The last card left the stack (or it was renamed away): close it.
+  useEffect(() => {
+    if (openStack && !openStackInfo) setOpenStack(null);
+  }, [openStack, openStackInfo]);
+
+  const handleOpenStack = useCallback(
+    (name: string, rect: DOMRect) => {
+      setOpenStack({ name, originRect: rect, autoEditTitle: false });
+      setHiddenStackName(name);
+      trackEvent("stack.opened", "session-groups", {
+        members: stacksByName[name]?.members.length ?? 0,
+      });
+    },
+    [stacksByName],
+  );
+
+  const handleDropOnSession = useCallback(
+    async (sourceId: string, targetId: string, targetRect: DOMRect) => {
+      const name = await createStack(sourceId, targetId);
+      if (!name) return;
+      // Open the new stack with its name selected, like a fresh iOS folder.
+      setOpenStack({ name, originRect: targetRect, autoEditTitle: true });
+      setHiddenStackName(name);
+    },
+    [createStack],
+  );
+
+  const handleDropOnStack = useCallback(
+    (sourceId: string, stackName: string) => {
+      void setSessionGroup(sourceId, stackName, "drag");
+    },
+    [setSessionGroup],
+  );
+
+  const handleRenameStack = useCallback(
+    async (to: string) => {
+      if (!openStack) return;
+      const stored = await renameStack(openStack.name, to);
+      if (!stored) return;
+      setOpenStack((current) => (current ? { ...current, name: stored } : current));
+      setHiddenStackName(stored);
+    },
+    [openStack, renameStack],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -90,14 +174,42 @@ export function HomeView({
       {sessions.length === 0 ? (
         <EmptyState onNewSession={onNewSession} />
       ) : (
-        <SmartGrid
-          sessions={sessions}
-          isTerminalOpen={isTerminalOpen}
-          onOpenSession={onSelectSession}
-          onSessionContextMenu={onSessionContextMenu}
-          sessionTypeMap={sessionTypeMap}
-        />
+        <div className="flex-1 overflow-y-auto flex items-start justify-center p-8 pb-20">
+          <SmartGrid
+            sessions={sessions}
+            isTerminalOpen={isTerminalOpen}
+            onOpenSession={onSelectSession}
+            onSessionContextMenu={onSessionContextMenu}
+            sessionTypeMap={sessionTypeMap}
+            openStackName={hiddenStackName}
+            onOpenStack={handleOpenStack}
+            onDropOnSession={(sourceId, targetId, rect) => void handleDropOnSession(sourceId, targetId, rect)}
+            onDropOnStack={handleDropOnStack}
+          />
+        </div>
       )}
+
+      <AnimatePresence onExitComplete={() => setHiddenStackName(null)}>
+        {openStack && openStackInfo && (
+          <StackOverlay
+            // Stable key: a rename must not remount (and replay) the panel.
+            key="stack-overlay"
+            stack={openStackInfo}
+            originRect={openStack.originRect}
+            originDropId={stackId(openStack.name)}
+            autoEditTitle={openStack.autoEditTitle}
+            sessionTypeMap={sessionTypeMap}
+            onClose={() => setOpenStack(null)}
+            onOpenSession={(id) => {
+              setOpenStack(null);
+              onSelectSession(id);
+            }}
+            onSessionContextMenu={onSessionContextMenu}
+            onRename={(to) => void handleRenameStack(to)}
+            onRemoveMember={(id) => void setSessionGroup(id, null, "drag")}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Floating action button */}
       {sessions.length > 0 && !isTerminalOpen && (

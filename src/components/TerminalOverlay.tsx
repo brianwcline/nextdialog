@@ -41,6 +41,7 @@ interface TerminalOverlayProps {
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
   onPark: (id: string) => void;
+  onMoveToGroup: (id: string) => void;
   onAddCompanion: (parentId: string) => void;
   onRemoveCompanion: (id: string) => void;
 }
@@ -54,6 +55,7 @@ export function TerminalOverlay({
   onRestart,
   onRemove,
   onPark,
+  onMoveToGroup,
   onAddCompanion,
   onRemoveCompanion,
 }: TerminalOverlayProps) {
@@ -437,6 +439,15 @@ export function TerminalOverlay({
                     >
                       <span>Park</span>
                       <span className="text-[10px] text-slate-500">⌘P</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onMoveToGroup(session.id);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600/50 transition-colors flex items-center justify-between"
+                    >
+                      <span>Move to group…</span>
                     </button>
                     <div className="border-t border-slate-600/50 my-1" />
                     {/* Dangerous actions */}
