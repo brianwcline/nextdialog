@@ -532,6 +532,7 @@ export function TerminalOverlay({
                 <TuningPanel
                   sessionId={activeSession.id}
                   sessionType={activeSession.session_type}
+                  skipPermissions={activeSession.skip_permissions}
                   onDismiss={() => setTuningOpen(false)}
                   onRestart={() => {
                     setTuningOpen(false);
