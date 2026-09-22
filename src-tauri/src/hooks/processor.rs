@@ -381,7 +381,7 @@ fn prompt_preview(prompt: &str) -> String {
         }
     }
     let cut = if last_space > 0 { last_space } else { end };
-    format!("{}…", &first_line[..cut].trim_end())
+    format!("{}…", first_line[..cut].trim_end())
 }
 
 /// Truncate a string to max length, appending "…" if truncated.
