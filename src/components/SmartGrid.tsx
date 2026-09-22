@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { Session, SessionType } from "../lib/types";
+import type { LayoutResult } from "../lib/attention";
 import { SessionCard } from "./SessionCard";
+import { StackTile } from "./StackTile";
 import { useSessionContext } from "../context/SessionContext";
 import { useSmartLayout } from "../hooks/useSmartLayout";
 import { useTimelineCounts } from "../hooks/useTimelineCounts";
+import { useCardDrag } from "../hooks/useCardDrag";
+import { buildStacks, stackNameFromId } from "../lib/stacks";
 import { trackEvent } from "../lib/telemetry";
 
 /** Delay (ms) for distinguishing single-click (focus) from double-click (open terminal). */
@@ -16,27 +20,32 @@ interface SmartGridProps {
   onOpenSession: (id: string) => void;
   onSessionContextMenu: (id: string, e: React.MouseEvent) => void;
   sessionTypeMap: Record<string, SessionType>;
-  /** False in grouped sections: plain masonry instead of a lead hero card. */
-  leadWithHero?: boolean;
+  /** Stack currently open in the overlay; its tile hides meanwhile. */
+  openStackName: string | null;
+  onOpenStack: (name: string, rect: DOMRect) => void;
+  /** A card was dropped on another card: make a stack of the two. */
+  onDropOnSession: (sourceId: string, targetId: string, targetRect: DOMRect) => void;
+  /** A card was dropped on a stack: add it. */
+  onDropOnStack: (sourceId: string, stackName: string) => void;
 }
 
 /**
- * Smart, attention-driven session grid. Replaces the uniform 2-column grid.
+ * Smart, attention-driven session grid.
  *
  * Layout engine lives in `src/lib/attention.ts`. This component:
  *   - Measures its container width via ResizeObserver
- *   - Calls `useSmartLayout` to compute absolute positions
- *   - Renders each card as an absolutely-positioned motion.div with `layout`
- *     prop so Framer Motion animates position changes
+ *   - Calls `useSmartLayout` to compute absolute positions; grouped sessions
+ *     are placed as one stack tile per group (iOS-folder style)
+ *   - Renders each item as an absolutely-positioned motion.div whose x/y/w/h
+ *     are animated explicitly
  *   - Handles click (focus) vs double-click (open terminal) with a 250ms
  *     pending-click ref that's per-card so fast clicks across cards don't
  *     false-positive as double-clicks
+ *   - Lets cards be dragged onto cards (new stack) or stacks (add). The
+ *     layout freezes during a drag so targets don't move under the pointer.
  *
  * The parent (HomeView) owns the scroll container and the Escape-to-unfocus
- * listener, so several grids can stack on one page (one per session group).
- *
- * Phase 1 hardcodes hybrid mode. Phase 2 (deferred) would read the mode
- * from settings.
+ * listener.
  */
 export function SmartGrid({
   sessions,
@@ -44,7 +53,10 @@ export function SmartGrid({
   onOpenSession,
   onSessionContextMenu,
   sessionTypeMap,
-  leadWithHero = true,
+  openStackName,
+  onOpenStack,
+  onDropOnSession,
+  onDropOnStack,
 }: SmartGridProps) {
   const { focusedSessionId, setFocusedSessionId } = useSessionContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,15 +64,43 @@ export function SmartGrid({
 
   // Timeline counts drive the frequency term in the attention score.
   const timelineCounts = useTimelineCounts(sessions);
+  const { loose, stacks } = useMemo(
+    () => buildStacks(sessions, timelineCounts),
+    [sessions, timelineCounts],
+  );
+  const stackMap = useMemo(
+    () => Object.fromEntries(stacks.map((stack) => [stack.name, stack])),
+    [stacks],
+  );
 
-  const layout = useSmartLayout(
-    sessions,
+  const liveLayout = useSmartLayout(
+    loose,
+    stacks,
     timelineCounts,
     focusedSessionId,
     containerWidth,
     "hybrid",
-    leadWithHero,
   );
+
+  const { dragState, beginPress, shouldSuppressClick } = useCardDrag({
+    onDrop: (sourceId, target) => {
+      if (!target) return;
+      const stackName = stackNameFromId(target.id);
+      if (target.kind === "stack" && stackName) {
+        onDropOnStack(sourceId, stackName);
+        return;
+      }
+      const targetEl = containerRef.current?.querySelector(
+        `[data-drop-id="${CSS.escape(target.id)}"]`,
+      );
+      if (targetEl) onDropOnSession(sourceId, target.id, targetEl.getBoundingClientRect());
+    },
+  });
+
+  // Freeze positions while dragging so drop targets stay put.
+  const frozenLayoutRef = useRef<LayoutResult>(liveLayout);
+  if (!dragState) frozenLayoutRef.current = liveLayout;
+  const layout = dragState ? frozenLayoutRef.current : liveLayout;
 
   // Measure container width — re-measure on resize.
   useLayoutEffect(() => {
@@ -105,6 +145,8 @@ export function SmartGrid({
 
   const handleCardClick = useCallback(
     (id: string) => {
+      // The click that ends a drag is not a focus or open.
+      if (shouldSuppressClick()) return;
       const pending = pendingClickRef.current;
 
       // Same card clicked twice within the window → double click → open terminal
@@ -137,7 +179,7 @@ export function SmartGrid({
 
       pendingClickRef.current = { id, timer };
     },
-    [onOpenSession, setFocusedSessionId],
+    [onOpenSession, setFocusedSessionId, shouldSuppressClick],
   );
 
   const sessionMap = Object.fromEntries(sessions.map((s) => [s.id, s]));
@@ -177,20 +219,54 @@ export function SmartGrid({
       )}
 
       {layout.positions.map((pos, idx) => {
+        const box = { x: pos.x, y: pos.y, width: pos.w, height: pos.h };
+        const transition = { duration: 0.4, ease: [0.25, 0.8, 0.25, 1] as const };
+        const isDropTarget = dragState?.target?.id === pos.id;
+
+        const stackName = stackNameFromId(pos.id);
+        if (stackName) {
+          const stack = stackMap[stackName];
+          if (!stack) return null;
+          return (
+            <motion.div
+              key={pos.id}
+              data-drop-id={pos.id}
+              data-drop-kind="stack"
+              initial={false}
+              animate={box}
+              transition={transition}
+              className="absolute top-0 left-0"
+            >
+              <StackTile
+                stack={stack}
+                size={pos.size}
+                sessionTypeMap={sessionTypeMap}
+                isOpen={openStackName === stackName}
+                isDropTarget={isDropTarget}
+                onOpen={(rect) => onOpenStack(stackName, rect)}
+              />
+            </motion.div>
+          );
+        }
+
         const session = sessionMap[pos.id];
         if (!session) return null;
+        const isDragSource = dragState?.sourceId === pos.id;
         return (
           <motion.div
             key={pos.id}
+            data-drop-id={pos.id}
+            data-drop-kind="session"
             initial={false}
             animate={{
-              x: pos.x,
-              y: pos.y,
-              width: pos.w,
-              height: pos.h,
+              ...box,
+              // A card armed as a merge target swells, like iOS before a folder forms.
+              scale: isDropTarget ? 1.06 : 1,
+              opacity: isDragSource ? 0.4 : 1,
             }}
-            transition={{ duration: 0.4, ease: [0.25, 0.8, 0.25, 1] }}
-            className="absolute top-0 left-0"
+            transition={transition}
+            className={`absolute top-0 left-0 ${isDropTarget ? "stack-merge-target" : ""}`}
+            onPointerDown={(e) => beginPress(pos.id, e)}
           >
             <SessionCard
               session={session}
@@ -201,6 +277,12 @@ export function SmartGrid({
               onClick={() => handleCardClick(pos.id)}
               onContextMenu={(e) => onSessionContextMenu(pos.id, e)}
             />
+            {isDropTarget && (
+              <span
+                aria-hidden
+                className="absolute -inset-1.5 rounded-[1.25rem] ring-2 ring-violet-400/70 pointer-events-none"
+              />
+            )}
           </motion.div>
         );
       })}

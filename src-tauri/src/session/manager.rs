@@ -11,6 +11,15 @@ use super::tuning::SessionTuning;
 /// Longest group name we store; longer input is cut on a char boundary.
 const MAX_GROUP_NAME_CHARS: usize = 40;
 
+/// Trim a group name and cap its length; blank means "no group".
+fn normalize_group_name(name: &str) -> Option<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(trimmed.chars().take(MAX_GROUP_NAME_CHARS).collect())
+}
+
 pub struct SessionManager {
     sessions: Mutex<Vec<SessionConfig>>,
     storage_path: PathBuf,
@@ -137,10 +146,7 @@ impl SessionManager {
     /// Put a session in a named group, or take it out with `None`. Names are
     /// trimmed; blank means ungrouped.
     pub fn set_group(&self, id: &str, group: Option<&str>) -> Result<Option<String>, String> {
-        let normalized = group
-            .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .map(|name| name.chars().take(MAX_GROUP_NAME_CHARS).collect::<String>());
+        let normalized = group.and_then(normalize_group_name);
         let mut sessions = self.sessions.lock().unwrap();
         let session = sessions
             .iter_mut()
@@ -149,6 +155,22 @@ impl SessionManager {
         session.group = normalized.clone();
         self.persist(&sessions);
         Ok(normalized)
+    }
+
+    /// Rename a group by moving every member to the new name in one write.
+    /// Returns the stored name and how many sessions moved.
+    pub fn rename_group(&self, from: &str, to: &str) -> Result<(String, usize), String> {
+        let to = normalize_group_name(to).ok_or("Group name can't be blank")?;
+        let mut sessions = self.sessions.lock().unwrap();
+        let mut moved = 0;
+        for session in sessions.iter_mut().filter(|s| s.group.as_deref() == Some(from)) {
+            session.group = Some(to.clone());
+            moved += 1;
+        }
+        if moved > 0 {
+            self.persist(&sessions);
+        }
+        Ok((to, moved))
     }
 
     pub fn update_tuning(
@@ -251,6 +273,38 @@ mod tests {
 
         let stored = manager.set_group(&id, Some(&"é".repeat(60))).unwrap().unwrap();
         assert_eq!(stored.chars().count(), MAX_GROUP_NAME_CHARS);
+    }
+
+    #[test]
+    fn rename_group_moves_every_member() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_in(tmp.path());
+        let a = create_session(&manager, tmp.path());
+        let b = create_session(&manager, tmp.path());
+        let c = create_session(&manager, tmp.path());
+        manager.set_group(&a, Some("Clients")).unwrap();
+        manager.set_group(&b, Some("Clients")).unwrap();
+        manager.set_group(&c, Some("Personal")).unwrap();
+
+        let (stored, moved) = manager.rename_group("Clients", " Acme ").unwrap();
+        assert_eq!((stored.as_str(), moved), ("Acme", 2));
+
+        let reloaded = manager_in(tmp.path());
+        assert_eq!(reloaded.get(&a).unwrap().group.as_deref(), Some("Acme"));
+        assert_eq!(reloaded.get(&b).unwrap().group.as_deref(), Some("Acme"));
+        assert_eq!(reloaded.get(&c).unwrap().group.as_deref(), Some("Personal"));
+    }
+
+    #[test]
+    fn rename_group_rejects_blank_and_ignores_unknown() {
+        let tmp = tempfile::tempdir().unwrap();
+        let manager = manager_in(tmp.path());
+        let a = create_session(&manager, tmp.path());
+        manager.set_group(&a, Some("Clients")).unwrap();
+
+        assert!(manager.rename_group("Clients", "   ").is_err());
+        assert_eq!(manager.rename_group("Nope", "Other").unwrap().1, 0);
+        assert_eq!(manager.get(&a).unwrap().group.as_deref(), Some("Clients"));
     }
 
     #[test]

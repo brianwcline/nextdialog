@@ -19,6 +19,10 @@
  *   .badge, .agent-icon
  *   .dock-divider (with a single <span> child for the label)
  *   .grid-container, .grid-container.hybrid-mode
+ *   Stacks (session groups): .stack-tile, .stack-layer (the cards peeking
+ *   out behind; they also carry .card so card rules apply), .stack-name,
+ *   .stack-badge, .stack-backdrop, .stack-panel, .stack-title,
+ *   .stack-merge-target (a card armed to form a stack), .card-drag-ghost
  *
  * `.hero-preview` and footer caption styling are intentionally omitted —
  * NextDialog doesn't render terminal previews inside cards or a page-level

@@ -8,6 +8,7 @@ import {
   type LayoutResult,
 } from "../lib/attention";
 import { toAttentionSession } from "./useAttentionScore";
+import { stackAttentionEntry, type StackInfo } from "../lib/stacks";
 
 /**
  * Memoized wrapper around `sortSessions` + `computeLayout`. Feeds real
@@ -20,17 +21,20 @@ import { toAttentionSession } from "./useAttentionScore";
  */
 export function useSmartLayout(
   sessions: Session[],
+  stacks: StackInfo[],
   timelineCounts: Record<string, number>,
   focusedSessionId: string | null,
   containerWidth: number,
   layout: LayoutMode = "hybrid",
-  leadWithHero = true,
 ): LayoutResult {
   // Build the AttentionSession array once per render.
   const attentionSessions = useMemo<AttentionSession[]>(
-    () =>
-      sessions.map((s) => toAttentionSession(s, timelineCounts[s.id] ?? 0)),
-    [sessions, timelineCounts],
+    () => [
+      ...sessions.map((s) => toAttentionSession(s, timelineCounts[s.id] ?? 0)),
+      // Each stack is placed as one synthetic entry scored from its members.
+      ...stacks.map((stack) => stackAttentionEntry(stack, timelineCounts)),
+    ],
+    [sessions, stacks, timelineCounts],
   );
 
   const focusedSession = useMemo<AttentionSession | null>(
@@ -51,6 +55,6 @@ export function useSmartLayout(
       };
     }
     const sorted = sortSessions(attentionSessions, layout, focusedSession);
-    return computeLayout(sorted, layout, focusedSession, containerWidth, leadWithHero);
-  }, [attentionSessions, layout, focusedSession, containerWidth, leadWithHero]);
+    return computeLayout(sorted, layout, focusedSession, containerWidth);
+  }, [attentionSessions, layout, focusedSession, containerWidth]);
 }

@@ -12,8 +12,8 @@ import { SettingsView } from "./components/SettingsView";
 import { SessionDock } from "./components/SessionDock";
 import { FeedbackModal } from "./components/FeedbackModal";
 import { GroupPickerModal } from "./components/GroupPickerModal";
-import { useSessionContext } from "./context/SessionContext";
-import { listGroupNames } from "./lib/sessionSections";
+import { useSessionGroups } from "./hooks/useSessionGroups";
+import { listGroupNames } from "./lib/stacks";
 import { useSession } from "./hooks/useSession";
 import { useStatus } from "./hooks/useStatus";
 import { useHookEvents } from "./hooks/useHookEvents";
@@ -65,7 +65,7 @@ class ErrorBoundary extends Component<
 
 function AppContent() {
   const { sessions, createSession, removeSession, loadSessions } = useSession();
-  const { dispatch } = useSessionContext();
+  const { groupNames, setSessionGroup } = useSessionGroups();
   const sessionIds = useMemo(() => sessions.map((s) => s.id), [sessions]);
   useStatus(sessionIds);
   useHookEvents(sessionIds);
@@ -248,39 +248,10 @@ function AppContent() {
     [activeSessionId, removeSession, sessions, companionMap],
   );
 
-  const groupNames = useMemo(() => listGroupNames(sessions), [sessions]);
   const [groupPickerSessionId, setGroupPickerSessionId] = useState<string | null>(null);
   const groupPickerSession = useMemo(
     () => sessions.find((s) => s.id === groupPickerSessionId) ?? null,
     [sessions, groupPickerSessionId],
-  );
-
-  const handleSetSessionGroup = useCallback(
-    async (id: string, group: string | null) => {
-      try {
-        const stored = await invoke<string | null>("set_session_group", { id, group });
-        dispatch({ type: "UPDATE_SESSION", id, updates: { group: stored ?? undefined } });
-        if (stored === null) {
-          trackEvent("session_group.removed", "session-groups", undefined, id);
-        } else {
-          // Group names are never sent: they can be client names.
-          const isNewGroup = !groupNames.includes(stored);
-          trackEvent(
-            "session_group.assigned",
-            "session-groups",
-            {
-              is_new_group: isNewGroup,
-              group_count: groupNames.length + (isNewGroup ? 1 : 0),
-            },
-            id,
-          );
-        }
-        setGroupPickerSessionId(null);
-      } catch (err) {
-        console.error("Failed to set session group:", err);
-      }
-    },
-    [dispatch, groupNames],
   );
 
   const handleParkSession = useCallback(
@@ -558,7 +529,10 @@ function AppContent() {
         session={groupPickerSession}
         existingGroups={groupNames}
         onPick={(group) => {
-          if (groupPickerSessionId) void handleSetSessionGroup(groupPickerSessionId, group);
+          if (!groupPickerSessionId) return;
+          void setSessionGroup(groupPickerSessionId, group, "menu").then(() =>
+            setGroupPickerSessionId(null),
+          );
         }}
         onClose={() => setGroupPickerSessionId(null)}
       />
