@@ -10,6 +10,10 @@ import type { AgentConfigOverrides, SessionTuning } from "../lib/types";
 interface TuningPanelProps {
   sessionId: string;
   sessionType: string;
+  /** Session was created with "skip permissions", which spawns Claude with
+   * --dangerously-skip-permissions whenever no permission_mode override is
+   * set. The Permission row's baseline must show that, not "Default". */
+  skipPermissions?: boolean;
   onDismiss: () => void;
   onRestart: () => void;
 }
@@ -34,12 +38,14 @@ const EFFORT_OPTIONS = [
   { value: "low", label: "Low", hint: "Quick answers" },
   { value: "medium", label: "Medium", hint: "Default" },
   { value: "high", label: "High", hint: "Thorough" },
+  { value: "xhigh", label: "Extra High", hint: "Harder problems" },
   { value: "max", label: "Max", hint: "Deep analysis" },
 ];
 const PERMISSION_OPTIONS = [
   { value: "default", label: "Default", hint: "Ask for each action" },
   { value: "plan", label: "Plan", hint: "Research first, then build" },
   { value: "acceptEdits", label: "Accept Edits", hint: "Auto-approve file changes" },
+  { value: "auto", label: "Auto", hint: "Classifier approves safe actions" },
   { value: "dontAsk", label: "Don't Ask", hint: "No prompts, deny if unsure" },
   { value: "bypassPermissions", label: "Bypass", hint: "Allow everything (careful!)" },
 ];
@@ -49,7 +55,7 @@ const THINKING_OPTIONS = [
   { value: "disabled", label: "Disabled", hint: "No thinking, faster" },
 ];
 
-export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: TuningPanelProps) {
+export function TuningPanel({ sessionId, sessionType, skipPermissions = false, onDismiss, onRestart }: TuningPanelProps) {
   const { tuning, baseline, loading, hasTuning, saveTuning, updateOverrides, updateStartupCommands, updateHooks, updatePermissions, updateFileConfigs, clearTuning } = useTuning(sessionId, sessionType);
   const { profiles, saveProfile, deleteProfile } = useProfiles(sessionType);
   const [newCommand, setNewCommand] = useState("");
@@ -286,7 +292,10 @@ export function TuningPanel({ sessionId, sessionType, onDismiss, onRestart }: Tu
                 <ButtonGroup
                   options={PERMISSION_OPTIONS}
                   value={overrides.permission_mode ?? null}
-                  baselineValue={baseline?.permission_mode ?? CLAUDE_DEFAULTS.permission_mode}
+                  baselineValue={
+                    baseline?.permission_mode ??
+                    (skipPermissions ? "bypassPermissions" : CLAUDE_DEFAULTS.permission_mode)
+                  }
                   onChange={(v) => handleOverride("permission_mode", v)}
                 />
               </ToggleRow>

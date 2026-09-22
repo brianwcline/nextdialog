@@ -29,6 +29,7 @@ pub fn inject_hook_config(working_dir: &str, port: u16) -> Result<(), String> {
         "SessionStart",
         "SessionEnd",
         "UserPromptSubmit",
+        "PostCompact",
     ];
 
     // Get or create the "hooks" object
@@ -41,15 +42,7 @@ pub fn inject_hook_config(working_dir: &str, port: u16) -> Result<(), String> {
         .ok_or("hooks field is not an object")?;
 
     for event_type in &event_types {
-        // Encode event type in the URL path so the server knows which hook fired
-        let hook_url = format!("http://127.0.0.1:{port}/hook/{event_type}");
-
-        let managed_hook = serde_json::json!({
-            "type": "http",
-            "url": hook_url,
-            "timeout": 2,
-            "_nextdialog_managed": true
-        });
+        let managed_hook = managed_hook_for(event_type, port);
 
         let managed_matcher = serde_json::json!({
             "matcher": "",
@@ -332,16 +325,54 @@ fn is_tuning_managed(matcher: &serde_json::Value) -> bool {
 
 /// Check if a matcher has a managed hook targeting a specific port.
 /// Matches by explicit `_nextdialog_managed` tag OR by URL pattern (catches untagged orphans).
+/// Build the managed hook entry for one event. The event type is encoded in
+/// the URL path so the server knows which hook fired.
+///
+/// SessionStart must be a command hook: Claude Code skips HTTP hooks for
+/// SessionStart, so an `http` entry never fires and the processor never sees
+/// the session start (#29). The command pipes
+/// the hook payload to the same endpoint, and Claude reads the JSON response
+/// (hookSpecificOutput.additionalContext) from stdout. `-f` plus `|| true`
+/// keeps a dead server from printing anything Claude would treat as context.
+fn managed_hook_for(event_type: &str, port: u16) -> serde_json::Value {
+    let hook_url = format!("http://127.0.0.1:{port}/hook/{event_type}");
+    if event_type == "SessionStart" {
+        let command = format!(
+            "curl -sf -m 2 -X POST -H 'Content-Type: application/json' --data-binary @- {hook_url} || true"
+        );
+        serde_json::json!({
+            "type": "command",
+            "command": command,
+            "timeout": 3,
+            "_nextdialog_managed": true
+        })
+    } else {
+        serde_json::json!({
+            "type": "http",
+            "url": hook_url,
+            "timeout": 2,
+            "_nextdialog_managed": true
+        })
+    }
+}
+
+/// Where a hook sends its payload: the `url` of an http hook, or the
+/// `command` of a command hook (which embeds the URL).
+fn hook_target(hook: &serde_json::Value) -> Option<&str> {
+    hook.get("url")
+        .or_else(|| hook.get("command"))
+        .and_then(|v| v.as_str())
+}
+
 fn is_managed_by_port(matcher: &serde_json::Value, port: u16) -> bool {
-    let prefix = format!("http://127.0.0.1:{port}/hook/");
+    let target = format!("http://127.0.0.1:{port}/hook/");
     matcher
         .get("hooks")
         .and_then(|h| h.as_array())
         .map(|hooks| {
             hooks.iter().any(|h| {
-                h.get("url")
-                    .and_then(|u| u.as_str())
-                    .map(|u| u.starts_with(&prefix))
+                hook_target(h)
+                    .map(|t| t.contains(&target))
                     .unwrap_or(false)
             })
         })
@@ -360,9 +391,7 @@ fn is_managed(matcher: &serde_json::Value) -> bool {
                     .get("_nextdialog_managed")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                let has_url = h
-                    .get("url")
-                    .and_then(|u| u.as_str())
+                let has_url = hook_target(h)
                     .map(is_nextdialog_hook_url)
                     .unwrap_or(false);
                 has_tag || has_url
@@ -371,10 +400,10 @@ fn is_managed(matcher: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Check if a URL matches the NextDialog hook server pattern.
+/// Check if a hook target (URL or command) points at a NextDialog hook server.
 /// Covers port range 7432-7499 used by PortPool.
-fn is_nextdialog_hook_url(url: &str) -> bool {
-    url.starts_with("http://127.0.0.1:74") && url.contains("/hook/")
+fn is_nextdialog_hook_url(target: &str) -> bool {
+    target.contains("http://127.0.0.1:74") && target.contains("/hook/")
 }
 
 fn claude_settings_path(working_dir: &str) -> PathBuf {
@@ -438,6 +467,68 @@ mod tests {
 
         // User hook preserved + our managed hook added
         assert_eq!(post_tool.len(), 2);
+    }
+
+    #[test]
+    fn session_start_is_a_command_hook() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+
+        let data: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(claude_settings_path(dir)).unwrap(),
+        )
+        .unwrap();
+        let hook = &data["hooks"]["SessionStart"][0]["hooks"][0];
+        assert_eq!(hook["type"], "command");
+        assert!(hook.get("url").is_none());
+        let command = hook["command"].as_str().unwrap();
+        assert!(command.contains("http://127.0.0.1:7432/hook/SessionStart"));
+        assert!(command.ends_with("|| true"));
+    }
+
+    #[test]
+    fn remove_by_port_cleans_session_start_command_hook() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        inject_hook_config(dir, 7432).unwrap();
+        inject_hook_config(dir, 7433).unwrap();
+        remove_hook_config(dir, Some(7432)).unwrap();
+
+        let data: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(claude_settings_path(dir)).unwrap(),
+        )
+        .unwrap();
+        let session_start = data["hooks"]["SessionStart"].as_array().unwrap();
+        assert_eq!(session_start.len(), 1);
+        let command = session_start[0]["hooks"][0]["command"].as_str().unwrap();
+        assert!(command.contains(":7433/"));
+    }
+
+    #[test]
+    fn crash_recovery_cleans_untagged_command_orphan() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+
+        let orphan = serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "matcher": "",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "curl -sf --data-binary @- http://127.0.0.1:7440/hook/SessionStart || true"
+                    }]
+                }]
+            }
+        });
+        let path = claude_settings_path(dir);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, serde_json::to_string_pretty(&orphan).unwrap()).unwrap();
+
+        remove_hook_config(dir, None).unwrap();
+        assert!(!path.exists());
     }
 
     #[test]
