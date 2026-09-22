@@ -19,6 +19,10 @@ import { useStatus } from "./hooks/useStatus";
 import { useHookEvents } from "./hooks/useHookEvents";
 import { useSessionTypes } from "./hooks/useSessionTypes";
 import { trackEvent } from "./lib/telemetry";
+import {
+  getTerminalFontSize,
+  loadTerminalFontSize,
+} from "./lib/terminalFontSize";
 import { MOOD_STORAGE_KEY, isMoodTheme } from "./themes";
 import {
   getRecentSessions,
@@ -342,6 +346,8 @@ function AppContent() {
     } catch {
       /* ignore */
     }
+    // Boot cache value, captured before the Settings reconciliation below.
+    const bootTerminalFontSize = getTerminalFontSize();
     // Read sessions directly: the context is still empty when this mount
     // effect runs, which made session_count always 0.
     invoke<Session[]>("list_sessions")
@@ -350,11 +356,13 @@ function AppContent() {
           session_count: loaded.length,
           group_count: listGroupNames(loaded).length,
           mood_theme: moodTheme,
+          terminal_font_size: bootTerminalFontSize,
         });
       })
       .catch((err: unknown) => {
         console.error("Failed to load sessions for launch telemetry:", err);
       });
+    loadTerminalFontSize();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

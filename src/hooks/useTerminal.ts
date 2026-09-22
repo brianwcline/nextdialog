@@ -6,12 +6,24 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { terminalOptions } from "../lib/terminal-theme";
+import {
+  getTerminalFontSize,
+  subscribeTerminalFontSize,
+} from "../lib/terminalFontSize";
 
-// === TEMPORARY: always-on debug logging ===
-const D = (...args: unknown[]) => console.log("[term-debug]", ...args);
-
-// Tolerance for "at bottom" checks — ink can leave viewport 1-2 rows short
-const BOTTOM_MARGIN = 3;
+// Scroll/resize tracing, off by default. Enable from devtools with
+// localStorage.setItem("nd-term-debug", "1") and reload.
+const TERM_DEBUG_STORAGE_KEY = "nd-term-debug";
+const TERM_DEBUG_ENABLED = (() => {
+  try {
+    return localStorage.getItem(TERM_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+const D = (...args: unknown[]) => {
+  if (TERM_DEBUG_ENABLED) console.log("[term-debug]", ...args);
+};
 
 // After a resize, force auto-scroll for this many ms. Ink re-renders
 // triggered by SIGWINCH can take several hundred ms and the intermediate
@@ -26,6 +38,7 @@ interface UseTerminalOptions {
 
 /** Dump all scroll-related state for debugging */
 function dumpState(label: string, term: Terminal) {
+  if (!TERM_DEBUG_ENABLED) return;
   const buf = term.buffer.active;
   const el = term.element;
   const viewport = el?.querySelector(".xterm-viewport") as HTMLElement | null;
@@ -61,6 +74,19 @@ function dumpState(label: string, term: Terminal) {
   }
 
   D(label, state);
+}
+
+/**
+ * Whether the user's viewport is showing the newest output. Compares viewportY
+ * (where the user is looking) against baseY (the bottom-most scroll position).
+ * The old check, baseY + rows >= buf.length, is always true in the normal
+ * buffer, so every write snapped the user back down (#20). No tolerance:
+ * xterm keeps viewportY === baseY exactly unless the user scrolled, and any
+ * margin would swallow a short trackpad scroll.
+ */
+function isViewportAtBottom(term: Terminal): boolean {
+  const buf = term.buffer.active;
+  return buf.viewportY >= buf.baseY;
 }
 
 /**
@@ -108,12 +134,19 @@ export function useTerminal({
 
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
 
+  // Read by the font-size subscriber, which lives outside the render cycle.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+
   // Create terminal once
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    const term = new Terminal(terminalOptions);
+    const term = new Terminal({
+      ...terminalOptions,
+      fontSize: getTerminalFontSize(),
+    });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
@@ -129,13 +162,12 @@ export function useTerminal({
     fitAddonRef.current = fitAddon;
 
     // Track whether viewport is at the bottom of scrollback
+    // No pending-write guard: during streaming a write is almost always in
+    // flight, and skipping those events discarded the user's scroll-up.
     term.onScroll(() => {
-      if (pendingWrites.current > 0) return;
       // During resize grace period, don't let scroll events flip isAtBottom
       if (Date.now() < forceAutoScrollUntil.current) return;
-      const buf = term.buffer.active;
-      const atBottom =
-        buf.baseY + term.rows + BOTTOM_MARGIN >= buf.length;
+      const atBottom = isViewportAtBottom(term);
       isAtBottomRef.current = atBottom;
       if (atBottom) {
         setShowScrollIndicator(false);
@@ -145,10 +177,7 @@ export function useTerminal({
     // Post-render position tracking — fires after ink rewrites complete
     term.onWriteParsed(() => {
       if (pendingWrites.current > 0) return;
-      const buf = term.buffer.active;
-      const atBottom =
-        buf.baseY + term.rows + BOTTOM_MARGIN >= buf.length;
-      if (atBottom) {
+      if (isViewportAtBottom(term)) {
         isAtBottomRef.current = true;
         setShowScrollIndicator(false);
       }
@@ -206,24 +235,19 @@ export function useTerminal({
       }
 
       pendingWrites.current++;
-      const inGracePeriod = Date.now() < forceAutoScrollUntil.current;
-      const shouldAutoScroll = isAtBottomRef.current || inGracePeriod;
-
-      if (inGracePeriod) {
-        D("write: grace period active, forcing auto-scroll");
-      }
 
       term.write(event.payload, () => {
         pendingWrites.current--;
 
         if (pendingWrites.current === 0) {
-          const buf = term.buffer.active;
-          const atBottom =
-            buf.baseY + term.rows + BOTTOM_MARGIN >= buf.length;
+          // Decide after the write lands, so a scroll-up that happened
+          // mid-write is respected.
+          const inGracePeriod = Date.now() < forceAutoScrollUntil.current;
+          const shouldAutoScroll = isAtBottomRef.current || inGracePeriod;
 
           syncViewportScrollArea(term, "write-cb");
 
-          if (shouldAutoScroll || atBottom) {
+          if (shouldAutoScroll) {
             term.scrollToBottom();
             isAtBottomRef.current = true;
             setShowScrollIndicator(false);
@@ -354,7 +378,17 @@ export function useTerminal({
       ) as HTMLElement | null;
       if (viewport) {
         const handleWheel = (e: WheelEvent) => {
-          if (e.deltaY <= 0) return;
+          if (e.deltaY < 0) {
+            // Scrolling up is explicit intent to read history: stop following
+            // output immediately, even inside the resize grace period, and
+            // before a write callback can race the onScroll event.
+            if (term.buffer.active.baseY > 0) {
+              forceAutoScrollUntil.current = 0;
+              isAtBottomRef.current = false;
+            }
+            return;
+          }
+          if (e.deltaY === 0) return;
           requestAnimationFrame(() => {
             const maxScroll =
               viewport.scrollHeight - viewport.clientHeight;
@@ -450,7 +484,7 @@ export function useTerminal({
           });
         });
       } catch (err) {
-        D("resize: error", err);
+        console.error("[useTerminal] resize failed", err);
       }
     };
 
@@ -488,6 +522,40 @@ export function useTerminal({
       window.removeEventListener("resize", handleWindowResize);
     };
   }, [sessionId, visible, containerRef]);
+
+  // Live font-size changes (Cmd+= / Settings). Hidden panes only take the
+  // new size; the mount effect re-fits them when they become visible.
+  useEffect(() => {
+    return subscribeTerminalFontSize(() => {
+      const term = termRef.current;
+      const fitAddon = fitAddonRef.current;
+      const size = getTerminalFontSize();
+      if (!term || term.options.fontSize === size) return;
+
+      const wasAtBottom = isAtBottomRef.current;
+      term.options.fontSize = size;
+      if (!visibleRef.current || !term.element || !fitAddon) return;
+
+      requestAnimationFrame(() => {
+        fitAddon.fit();
+        invoke("resize_pty", {
+          id: sessionId,
+          rows: term.rows,
+          cols: term.cols,
+        }).catch(() => {});
+        if (wasAtBottom) {
+          // Same reasoning as resize: the agent's TUI redraws after
+          // SIGWINCH and must not flip us out of follow mode.
+          forceAutoScrollUntil.current = Date.now() + RESIZE_GRACE_MS;
+          isAtBottomRef.current = true;
+          requestAnimationFrame(() => {
+            syncViewportScrollArea(term, "font-size");
+            term.scrollToBottom();
+          });
+        }
+      });
+    });
+  }, [sessionId]);
 
   const focus = useCallback(() => {
     termRef.current?.focus();

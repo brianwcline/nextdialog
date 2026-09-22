@@ -85,6 +85,7 @@ pub fn run() {
             commands::check_and_paste_clipboard_image,
             commands::get_settings,
             commands::save_settings,
+            commands::set_terminal_font_size,
             commands::get_session_preview,
             commands::get_session_activity,
             commands::park_session,

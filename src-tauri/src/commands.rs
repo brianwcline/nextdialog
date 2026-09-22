@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
 use crate::hooks::config as hook_config;
@@ -21,6 +21,7 @@ use crate::intelligence::IntelligenceManager;
 use crate::settings::{Settings, SettingsManager};
 use crate::telemetry::TelemetryClient;
 use crate::timeline::ledger::{TimelineEntry, TimelineLedger};
+use crate::timeline::transcript;
 
 // ── Session CRUD ──
 
@@ -139,6 +140,12 @@ pub fn spawn_pty_session(
         }
     }
 
+    // Before spawning, so the new conversation's own transcript can't be
+    // mistaken for earlier history.
+    if session_type.id == "claude-code" {
+        backfill_timeline_from_transcript(&app_handle, &id, &session.working_directory);
+    }
+
     pool.spawn(
         &id,
         &session_type,
@@ -152,8 +159,64 @@ pub fn spawn_pty_session(
     )?;
 
     file_tracker.register_session(&id, &session.working_directory);
+    record_lifecycle_entry(&app_handle, &id, "Session started");
     manager.update_status(&id, "starting");
     Ok(())
+}
+
+const TRANSCRIPT_BACKFILL_MAX_ENTRIES: usize = 100;
+
+/// Seed an empty timeline from the project's newest Claude Code transcript,
+/// so a session opened on a project with earlier work isn't blank (#16).
+/// No-op once the session has any timeline entries.
+fn backfill_timeline_from_transcript(app_handle: &AppHandle, session_id: &str, working_dir: &str) {
+    let Some(ledger) = app_handle.try_state::<TimelineLedger>() else {
+        return;
+    };
+    if ledger.count(session_id) > 0 {
+        return;
+    }
+    let Some(path) = transcript::project_transcript_dir(working_dir)
+        .and_then(|dir| transcript::latest_transcript(&dir))
+    else {
+        return;
+    };
+
+    let entries = transcript::read_transcript_entries(&path, TRANSCRIPT_BACKFILL_MAX_ENTRIES);
+    if entries.is_empty() {
+        return;
+    }
+    for entry in &entries {
+        ledger.append(session_id, entry);
+    }
+    // The timeline renders newest-first, so this marker sits above the import.
+    let marker = TimelineEntry::new("lifecycle", "Earlier work below is from Claude Code history")
+        .with_details(serde_json::json!({ "source": transcript::TRANSCRIPT_SOURCE }));
+    ledger.append(session_id, &marker);
+    eprintln!("[timeline] Backfilled {} entries for session {session_id}", entries.len());
+
+    if let Some(telemetry) = app_handle.try_state::<TelemetryClient>() {
+        telemetry.queue_event(
+            "timeline.history_imported".to_string(),
+            "timeline".to_string(),
+            Some(serde_json::json!({ "entries": entries.len() })),
+            Some(session_id.to_string()),
+            None,
+        );
+    }
+}
+
+/// Record a lifecycle entry owned by NextDialog rather than an agent hook.
+/// We spawn the process, so we know it started even when the agent's own
+/// SessionStart hook never reaches us (Claude Code drops HTTP SessionStart hooks).
+fn record_lifecycle_entry(app_handle: &AppHandle, session_id: &str, summary: &str) {
+    let Some(ledger) = app_handle.try_state::<TimelineLedger>() else {
+        eprintln!("[timeline] Ledger unavailable; skipped lifecycle entry for {session_id}");
+        return;
+    };
+    let entry = TimelineEntry::new("lifecycle", summary);
+    ledger.append(session_id, &entry);
+    let _ = app_handle.emit(&format!("session-timeline-{session_id}"), &entry);
 }
 
 #[tauri::command]
@@ -263,6 +326,7 @@ pub fn restart_pty_session(
         }
     }
 
+    record_lifecycle_entry(&app_handle, &id, "Session restarted");
     manager.update_status(&id, "starting");
     Ok(())
 }
@@ -305,6 +369,15 @@ pub fn get_settings(manager: State<'_, SettingsManager>) -> Settings {
 #[tauri::command]
 pub fn save_settings(manager: State<'_, SettingsManager>, settings: Settings) {
     manager.save(settings);
+}
+
+/// Persist only the terminal font size. Returns the clamped value actually
+/// stored so the frontend can reconcile if it sent something out of range.
+#[tauri::command]
+pub fn set_terminal_font_size(manager: State<'_, SettingsManager>, size: u16) -> u16 {
+    let clamped = crate::settings::clamp_terminal_font_size(size);
+    manager.update(|settings| settings.terminal_font_size = clamped);
+    clamped
 }
 
 // ── Session Parking ──
