@@ -3,7 +3,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::clipboard::bridge::save_clipboard_image;
 use crate::hooks::config as hook_config;
@@ -152,8 +152,22 @@ pub fn spawn_pty_session(
     )?;
 
     file_tracker.register_session(&id, &session.working_directory);
+    record_lifecycle_entry(&app_handle, &id, "Session started");
     manager.update_status(&id, "starting");
     Ok(())
+}
+
+/// Record a lifecycle entry owned by NextDialog rather than an agent hook.
+/// We spawn the process, so we know it started even when the agent's own
+/// SessionStart hook never reaches us (Claude Code drops HTTP SessionStart hooks).
+fn record_lifecycle_entry(app_handle: &AppHandle, session_id: &str, summary: &str) {
+    let Some(ledger) = app_handle.try_state::<TimelineLedger>() else {
+        eprintln!("[timeline] Ledger unavailable; skipped lifecycle entry for {session_id}");
+        return;
+    };
+    let entry = TimelineEntry::new("lifecycle", summary);
+    ledger.append(session_id, &entry);
+    let _ = app_handle.emit(&format!("session-timeline-{session_id}"), &entry);
 }
 
 #[tauri::command]
@@ -263,6 +277,7 @@ pub fn restart_pty_session(
         }
     }
 
+    record_lifecycle_entry(&app_handle, &id, "Session restarted");
     manager.update_status(&id, "starting");
     Ok(())
 }
