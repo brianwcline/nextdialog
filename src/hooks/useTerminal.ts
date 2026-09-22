@@ -7,8 +7,19 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { terminalOptions } from "../lib/terminal-theme";
 
-// === TEMPORARY: always-on debug logging ===
-const D = (...args: unknown[]) => console.log("[term-debug]", ...args);
+// Scroll/resize tracing, off by default. Enable from devtools with
+// localStorage.setItem("nd-term-debug", "1") and reload.
+const TERM_DEBUG_STORAGE_KEY = "nd-term-debug";
+const TERM_DEBUG_ENABLED = (() => {
+  try {
+    return localStorage.getItem(TERM_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+const D = (...args: unknown[]) => {
+  if (TERM_DEBUG_ENABLED) console.log("[term-debug]", ...args);
+};
 
 // After a resize, force auto-scroll for this many ms. Ink re-renders
 // triggered by SIGWINCH can take several hundred ms and the intermediate
@@ -23,6 +34,7 @@ interface UseTerminalOptions {
 
 /** Dump all scroll-related state for debugging */
 function dumpState(label: string, term: Terminal) {
+  if (!TERM_DEBUG_ENABLED) return;
   const buf = term.buffer.active;
   const el = term.element;
   const viewport = el?.querySelector(".xterm-viewport") as HTMLElement | null;
@@ -461,7 +473,7 @@ export function useTerminal({
           });
         });
       } catch (err) {
-        D("resize: error", err);
+        console.error("[useTerminal] resize failed", err);
       }
     };
 
