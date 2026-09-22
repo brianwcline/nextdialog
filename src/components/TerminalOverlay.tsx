@@ -8,6 +8,10 @@ import { SessionTimeline } from "./SessionTimeline";
 import { TuningPanel } from "./TuningPanel";
 import { StatusDot } from "./StatusDot";
 import { trackEvent } from "../lib/telemetry";
+import {
+  resetTerminalFontSize,
+  stepTerminalFontSize,
+} from "../lib/terminalFontSize";
 import type { Session } from "../lib/types";
 import "@xterm/xterm/css/xterm.css";
 
@@ -162,6 +166,23 @@ export function TerminalOverlay({
         if (activeTabId !== session.id) {
           onRemoveCompanion(activeTabId);
         }
+        return;
+      }
+
+      // ⌘= / ⌘+ / ⌘- / ⌘0 → terminal font size (global, all panes)
+      if (e.metaKey && !e.altKey && (e.key === "=" || e.key === "+")) {
+        e.preventDefault();
+        stepTerminalFontSize(1);
+        return;
+      }
+      if (e.metaKey && !e.altKey && e.key === "-") {
+        e.preventDefault();
+        stepTerminalFontSize(-1);
+        return;
+      }
+      if (e.metaKey && !e.altKey && e.key === "0") {
+        e.preventDefault();
+        resetTerminalFontSize();
         return;
       }
 
